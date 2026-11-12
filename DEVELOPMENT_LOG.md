@@ -146,3 +146,31 @@ known limitations, phase by phase.
 
 - Notifications are in-app only. E-mail/SMS delivery can subscribe to the same domain events later (SMTP is already configurable).
 - Recurring programs (e.g. every Sunday) are not generated automatically; regular services are captured through attendance records by service type.
+
+## Phase 5 — Offline sync, reporting & documents  ✅
+
+**Completed — offline synchronisation (`apps/sync`, `frontend/src/offline`)**
+
+- Every change made on a device goes into an on-device outbox with a client-generated ID and an `Idempotency-Key`. The server stores the response per user and key, so a request replayed after a dropped connection is answered from the stored result and never creates a second record.
+- Updates carry the version the device last saw (`If-Match`). If someone changed the record in the meantime the server refuses with *409 version conflict*, returns its copy and records a conflict. The Sync Centre shows both versions field by field; the user keeps the server copy or re-applies their change. Re-applying is blocked for finance entries that are approved or locked, so synchronisation can never overwrite approved financial data.
+- Pull feed (`/api/sync/pull/`) per entity with a cursor, limited to the user's jurisdiction, including deletions, so devices keep an up-to-date local copy.
+- Header indicator (pending changes, last sync, failures); Sync Centre with queue, history, conflicts and registered devices; retry and discard per change; sign-out warns before discarding unsynchronised changes.
+- Bugs found and fixed along the way: the outbox failed to save while offline (a read happened inside the IndexedDB transaction); lazily loaded screens failed offline on the first visit (the service worker now takes control immediately); rows created in bulk had no sync cursor and were missing from the pull feed (cursor now assigned by default, existing rows backfilled by migration).
+- End-to-end browser test (`frontend/e2e/offline.spec.ts`): record attendance while offline, reconnect, confirm exactly one record on the server.
+
+**Completed — hierarchical reporting & compliance (`apps/reports`)**
+
+- Configurable report templates (frequency, unit types, due days, narrative questions). Seeded: branch monthly, district monthly, regional quarterly and annual reports.
+- Figures (members, attendance, finance, programs) are computed from the records for the period and **frozen on submission**; narrative answers are added by the unit. The unit above reviews: accept, or return with a reason.
+- Compliance view per period: submitted on time, late, overdue or not started for every unit below; export to PDF/Excel/CSV; PDF of each report with the church logo. Dashboard section and attention items for due and awaiting reports.
+
+**Completed — documents & records (`apps/documents`)**
+
+- Documents (certificates, title deeds, minutes, policies, letters…) stored **outside the web root** and served only through the API after a permission check. Each upload is a new immutable version with its SHA-256 checksum; downloads are audited and sent with a sandboxing content policy. Restricted documents are visible only to holders of `documents.edit` in that unit. Expiry dates and archiving.
+- Uploads are limited by size and extension (`MAX_UPLOAD_MB`, `ALLOWED_UPLOAD_EXTENSIONS`).
+
+**Tests:** 134 backend tests (adds idempotent replay, version conflicts, conflict resolution permissions, pull-feed jurisdiction and tombstones, report figures, submission freezing, review at the parent unit, compliance, documents access, versions and private download) plus the offline browser test.
+
+**Known limitations / outstanding**
+
+- The member register and document uploads need a connection; head counts, members, finance entries and assets work offline.

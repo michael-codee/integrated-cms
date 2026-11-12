@@ -89,3 +89,17 @@ def test_pull_feed_is_scoped_incremental_and_has_tombstones(people, units, api):
     assert Device.objects.filter(user=people["pastor_koidu"], device_id="dev-1", last_sync_at__isnull=False).exists()
     status = koidu.get("/api/sync/status/").data
     assert status["devices"][0]["device_id"] == "dev-1"
+
+
+def test_bulk_created_rows_reach_the_pull_feed(people, units):
+    from apps.configuration.models import ServiceType
+    from apps.attendance.models import AttendanceRecord
+    import datetime
+
+    st = ServiceType.objects.first()
+    AttendanceRecord.objects.bulk_create([
+        AttendanceRecord(org_unit=units["BR-KONO-001"], service_type=st, date=datetime.date(2024, 1, d), men=1)
+        for d in (7, 14)])
+    assert not AttendanceRecord.objects.filter(sync_seq=0).exists()
+    rows = jwt(people["pastor_koidu"]).get("/api/sync/pull/?entity=attendance&cursor=0").data["results"]
+    assert len(rows) == 2

@@ -203,11 +203,36 @@ export function AnnouncementsSection({ data }: { data: DashboardData }) {
   );
 }
 
+interface ReportsData { compliance: { template: { id: string; name: string }; period: { label: string; due: string }; expected: number; rate: number | null; on_time_rate: number | null; overdue_count: number; overdue: { org_unit_name: string; parent_name: string; submission: string | null }[] }[] }
+
+function ReportsSection({ data }: { data: DashboardData }) {
+  const r = data.reports as ReportsData | undefined;
+  if (!r?.compliance.length) return null;
+  return (
+    <section className="space-y-4">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Reporting compliance</h2>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {r.compliance.map((c) => (
+          <Card key={c.template.id}>
+            <CardHeader title={c.template.name} subtitle={`${c.period.label} · ${c.expected} expected`} actions={<Link to="/reports?tab=compliance" className="text-xs font-medium text-royal-700 hover:underline dark:text-royal-300">Details</Link>} />
+            <CardBody>
+              <div className="flex items-baseline gap-2"><span className="text-3xl font-semibold tabular-nums">{c.rate ?? 0}%</span><span className="text-sm text-slate-500">submitted · {c.on_time_rate ?? 0}% on time</span></div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-full rounded-full bg-royal-600" style={{ width: `${c.rate ?? 0}%` }} /></div>
+              {c.overdue_count > 0 && <p className="mt-3 text-xs text-red-700 dark:text-red-300">Overdue: {c.overdue.slice(0, 4).map((o) => o.org_unit_name).join(', ')}{c.overdue_count > 4 ? ` and ${c.overdue_count - 4} more` : ''}</p>}
+            </CardBody>
+          </Card>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 /** Ordered list of sections; later phases insert theirs. */
 export const DASHBOARD_SECTIONS: { key: string; component: SectionComponent }[] = [
   { key: 'structure', component: StructureKpis },
   { key: 'membership', component: MembershipSection },
   { key: 'finance', component: FinanceSection },
+  { key: 'reports', component: ReportsSection },
   { key: 'attendance', component: AttendanceSection },
   { key: 'programs', component: ProgramsSection },
   { key: 'assets', component: AssetsSection },

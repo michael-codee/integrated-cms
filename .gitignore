@@ -22,7 +22,7 @@ frontend/playwright-report/
 *.env.local
 
 # Backups
-backups/*.sql.gz
+backups/
 
 # OS / editors
 .DS_Store

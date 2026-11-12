@@ -1,0 +1,96 @@
+# RLWM CMIS production stack. See docs/DEPLOYMENT.md.
+#   cp .env.example .env   # then fill in real values
+#   docker compose up -d --build
+#   docker compose exec api python manage.py provision_admin --role system_admin
+name: rlwm-cmis
+
+x-api: &api
+  build: ./backend
+  image: rlwm-cmis-api:latest
+  env_file: .env
+  volumes:
+    - media:/data/media
+    - private_media:/data/private-media
+  depends_on:
+    db:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cmis}
+      POSTGRES_USER: ${POSTGRES_USER:-cmis}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    # No published port: only the API containers can reach the database.
+
+  api:
+    <<: *api
+    environment:
+      POSTGRES_HOST: db
+      RUN_MIGRATIONS: "1"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/api/health/')"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  # Daily data-retention clean-up (purge_expired). Never touches church records or the audit trail.
+  housekeeping:
+    <<: *api
+    environment:
+      POSTGRES_HOST: db
+    command: ["sh", "-c", "while true; do python manage.py purge_expired; sleep 86400; done"]
+    depends_on:
+      api:
+        condition: service_healthy  # migrations have run
+
+  # Nightly backup of the database and all uploaded files (deploy/backup.sh).
+  backup:
+    image: postgres:16-alpine
+    env_file: .env
+    environment:
+      POSTGRES_HOST: db
+    entrypoint: ["/scripts/backup-loop.sh"]
+    volumes:
+      - ./deploy:/scripts:ro
+      - media:/data/media:ro
+      - private_media:/data/private-media:ro
+      - ${BACKUP_DIR:-./backups}:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build: ./frontend
+    image: rlwm-cmis-web:latest
+    environment:
+      CMIS_DOMAIN: ${CMIS_DOMAIN:?Set CMIS_DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  media:
+  private_media:
+  caddy_data:
+  caddy_config:

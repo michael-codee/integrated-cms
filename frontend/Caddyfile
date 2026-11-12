@@ -1,0 +1,48 @@
+# RLWM CMIS web server. CMIS_DOMAIN comes from .env; Caddy obtains and renews the
+# HTTPS certificate automatically. Set CMIS_DOMAIN=:80 for a plain-HTTP local trial.
+{$CMIS_DOMAIN:localhost} {
+	encode zstd gzip
+
+	# Uploads: keep in step with MAX_UPLOAD_MB (plus room for form fields).
+	request_body {
+		max_size 25MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "same-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Content-Security-Policy "default-src 'self'; img-src 'self' data: blob: https://*.tile.openstreetmap.org; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		-Server
+	}
+
+	# API, Django admin and its static files go to the Django application.
+	# Uploaded files are never served from disk here: the API streams them after checking a signed link.
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+	handle /django-admin/* {
+		reverse_proxy api:8000
+	}
+	handle /static/* {
+		reverse_proxy api:8000
+	}
+
+	handle {
+		root * /srv
+		# The service worker and app shell must always be re-validated so updates reach devices.
+		@nocache path /sw.js /index.html /manifest.webmanifest /registerSW.js
+		header @nocache Cache-Control "no-cache"
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

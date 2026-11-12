@@ -1,0 +1,2 @@
+export interface Notification { id: number; event_type: string; title: string; body: string; link: string; actor_name: string; created_at: string; read_at: string | null }
+export interface Announcement { id: string; org_unit: string; org_unit_name: string; title: string; body: string; priority: 'normal' | 'important' | 'urgent'; publish_at: string; expires_at: string | null; is_pinned: boolean; author: string | null; created_at: string }

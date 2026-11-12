@@ -31,3 +31,4 @@ backups/*.sql.gz
 *.tsbuildinfo
 *.log
 test-results/
+backend/private-media/

@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     "apps.dashboard",
     "apps.sync",
     "apps.reports",
+    "apps.documents",
 ]
 
 MIDDLEWARE = [
@@ -129,6 +130,8 @@ STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = Path(env("MEDIA_ROOT", str(BASE_DIR / "media")))
+# Documents & records are stored here and only served through the API (never by the web server).
+PRIVATE_MEDIA_ROOT = Path(env("PRIVATE_MEDIA_ROOT", str(BASE_DIR / "private-media")))
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

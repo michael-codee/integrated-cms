@@ -32,6 +32,7 @@ const NotificationsPage = lazy(() => import('@/modules/notifications/Notificatio
 const AnnouncementsPage = lazy(() => import('@/modules/notifications/AnnouncementsPage'));
 const ReportsPage = lazy(() => import('@/modules/reports/ReportsPage'));
 const ReportDetailPage = lazy(() => import('@/modules/reports/ReportDetailPage'));
+const DocumentsPage = lazy(() => import('@/modules/documents/DocumentsPage'));
 const SyncCentrePage = lazy(() => import('@/modules/sync/SyncCentrePage'));
 const UsersPage = lazy(() => import('@/modules/admin/UsersPage'));
 const RolesPage = lazy(() => import('@/modules/admin/RolesPage'));
@@ -83,6 +84,7 @@ export const router = createBrowserRouter([
       { path: 'announcements', element: s(<AnnouncementsPage />) },
       { path: 'reports', element: guarded('reports.view', <ReportsPage />) },
       { path: 'reports/:id', element: guarded('reports.view', <ReportDetailPage />) },
+      { path: 'documents', element: guarded('documents.view', <DocumentsPage />) },
       { path: 'sync', element: s(<SyncCentrePage />) },
       { path: 'admin/users', element: guarded('users.view', <UsersPage />) },
       { path: 'admin/roles', element: guarded('roles.edit', <RolesPage />) },

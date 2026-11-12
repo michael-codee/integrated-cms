@@ -53,7 +53,7 @@ export function StatCard({ label, value, hint, icon, tone = 'royal', to }: {
   };
   const body = (
     <div className={clsx('flex h-full items-start gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-card dark:border-slate-700/70 dark:bg-slate-900', to && 'transition hover:border-royal-300 hover:shadow-md')}>
-      {icon && <div className={clsx('rounded-lg p-2.5', tones[tone])}>{icon}</div>}
+      {icon && <div className={clsx('shrink-0 rounded-lg p-2.5', tones[tone])}>{icon}</div>}
       <div className="min-w-0">
         <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p>
         <p className="mt-1 truncate text-2xl font-semibold text-slate-900 dark:text-white">{value}</p>

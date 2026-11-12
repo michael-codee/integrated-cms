@@ -48,6 +48,8 @@ INSTALLED_APPS = [
     "apps.organization",
     "apps.accounts",
     "apps.configuration",
+    "apps.members",
+    "apps.dashboard",
 ]
 
 MIDDLEWARE = [

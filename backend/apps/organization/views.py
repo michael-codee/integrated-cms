@@ -2,6 +2,7 @@ from django.db.models import Count, Q
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from apps.audit import services as audit
 from apps.audit.models import AuditLog
@@ -106,3 +107,14 @@ class OrgUnitViewSet(ScopedModelViewSet):
                                       note=request.data.get("note", ""), created_by=request.user)
         audit.record(AuditLog.Action.STATUS_CHANGE, instance=unit, changes={"status": [old, new_status]})
         return Response(OrgUnitSerializer(unit, context={"request": request}).data)
+
+
+class BranchDirectoryView(APIView):
+    """Names of all active branches/congregations (no other details), so an
+    officer can choose a receiving branch for a transfer or a program."""
+
+    def get(self, request):
+        units = OrgUnit.objects.filter(unit_type__in=["branch", "congregation"], status="active").select_related(
+            "parent").order_by("name")
+        return Response([{"id": str(u.id), "name": u.name, "code": u.code,
+                          "district": u.parent.name if u.parent else ""} for u in units])

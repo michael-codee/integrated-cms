@@ -26,6 +26,10 @@ function Brand({ compact = false }: { compact?: boolean }) {
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { can, canAny } = useAuth();
   const allowed = (perm?: string | string[]) => !perm || (Array.isArray(perm) ? canAny(...perm) : can(perm));
+  const { pathname } = useLocation();
+  // Only the most specific matching entry is highlighted (e.g. /members/transfers is not also "Membership").
+  const matches = (to: string) => (to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(to + '/'));
+  const activeTo = NAV.flatMap((g) => g.items.map((i) => i.to)).filter(matches).sort((a, b) => b.length - a.length)[0];
   return (
     <div className="flex h-full flex-col bg-gradient-to-b from-royal-900 via-royal-900 to-royal-950">
       <div className="flex h-16 items-center px-4"><Brand /></div>
@@ -43,14 +47,15 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                       to={item.to}
                       end={item.to === '/'}
                       onClick={onNavigate}
-                      className={({ isActive }) =>
+                      className={() => { const isActive = item.to === activeTo; return (
                         clsx('group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition',
-                          isActive ? 'bg-white/10 text-white shadow-inner ring-1 ring-white/10' : 'text-royal-100/80 hover:bg-white/5 hover:text-white')
+                          isActive ? 'bg-white/10 text-white shadow-inner ring-1 ring-white/10' : 'text-royal-100/80 hover:bg-white/5 hover:text-white')); }
                       }
+                      aria-current={item.to === activeTo ? 'page' : undefined}
                     >
-                      {({ isActive }) => (
+                      {() => (
                         <>
-                          <item.icon className={clsx('h-4 w-4 shrink-0', isActive ? 'text-gold-300' : 'text-royal-300 group-hover:text-gold-200')} />
+                          <item.icon className={clsx('h-4 w-4 shrink-0', item.to === activeTo ? 'text-gold-300' : 'text-royal-300 group-hover:text-gold-200')} />
                           <span className="truncate">{item.label}</span>
                         </>
                       )}

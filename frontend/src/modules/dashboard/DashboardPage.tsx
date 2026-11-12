@@ -1,30 +1,70 @@
-import { Building2, Church, Globe2, Users } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { RefreshCw } from 'lucide-react';
+import { api, OfflineError } from '@/lib/api';
 import { useAuth } from '@/app/AuthContext';
-import { Card, CardBody, CardHeader, PageHeader, StatCard } from '@/components/ui';
-import { useOrgUnits } from '@/lib/queries';
+import { Button, EmptyState, PageHeader, PageLoader } from '@/components/ui';
+import { getMeta, setMeta } from '@/offline/db';
+import { dateTime } from '@/lib/format';
+import { DashboardFilters } from './DashboardFilters';
+import { AttentionSection, DASHBOARD_SECTIONS } from './sections';
+import type { DashboardData, DashboardFilters as F } from './types';
+
+const EMPTY: F = { region: '', district: '', branch: '', from: '', to: '', financial_year: '', department: '' };
+
+async function loadDashboard(params: Record<string, string>): Promise<DashboardData & { _cached?: boolean }> {
+  const key = `dashboard:${JSON.stringify(params)}`;
+  try {
+    const data = await api<DashboardData>('/dashboard/', { params });
+    setMeta(key, data);
+    return data;
+  } catch (e) {
+    if (e instanceof OfflineError) {
+      const cached = await getMeta<DashboardData>(key);
+      if (cached) return { ...cached, _cached: true };
+    }
+    throw e;
+  }
+}
 
 export default function DashboardPage() {
-  const { user } = useAuth();
-  const { data: units = [] } = useOrgUnits();
-  const count = (t: string) => units.filter((u) => u.unit_type === t && u.status === 'active').length;
+  const { user, can } = useAuth();
+  const [filters, setFilters] = useState<F>(EMPTY);
+  const params = useMemo(() => ({
+    org_unit: filters.branch || filters.district || filters.region, from: filters.from, to: filters.to,
+    financial_year: filters.financial_year, department: filters.department,
+  }), [filters]);
+  const { data, isLoading, isFetching, error, refetch } = useQuery({ queryKey: ['dashboard', params], queryFn: () => loadDashboard(params), enabled: can('dashboard.view') });
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const scopeLabel = data?.scope.filtered_unit?.name || data?.scope.jurisdiction.map((j) => j.name).join(', ');
+
   return (
     <div>
-      <PageHeader title={`${greeting}, ${user?.title ? user.title + ' ' : ''}${user?.full_name?.split(' ')[0] || ''}`}
-        subtitle={user?.assignments.map((a) => `${a.role_name} · ${a.org_unit_name}`).join(' | ')} />
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Regions" value={count('region')} icon={<Globe2 className="h-5 w-5" />} to="/structure" />
-        <StatCard label="Districts" value={count('district')} icon={<Building2 className="h-5 w-5" />} to="/structure" tone="purple" />
-        <StatCard label="Branches" value={count('branch')} icon={<Church className="h-5 w-5" />} to="/structure" tone="gold" />
-        <StatCard label="Congregations" value={count('congregation')} icon={<Users className="h-5 w-5" />} to="/structure" tone="green" />
-      </div>
-      <Card className="mt-6">
-        <CardHeader title="Welcome to the RLWM Church Management Information System" />
-        <CardBody className="font-serif text-sm italic text-slate-600 dark:text-slate-300">
-          “Let all things be done decently and in order.” — 1 Corinthians 14:40
-        </CardBody>
-      </Card>
+      <PageHeader
+        title={`${greeting}, ${user?.title ? user.title + ' ' : ''}${user?.full_name?.split(' ')[0] || ''}`}
+        subtitle={scopeLabel ? `Overview of ${scopeLabel}` : 'Executive dashboard'}
+        actions={can('dashboard.view') && <Button variant="secondary" size="sm" icon={<RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />} onClick={() => refetch()}>Refresh</Button>} />
+      {!can('dashboard.view') ? (
+        <EmptyState title="Welcome" message="Your role does not include the dashboard. Use the menu to reach your modules." />
+      ) : (
+        <>
+          <DashboardFilters value={filters} onChange={setFilters} />
+          {isLoading ? <PageLoader label="Gathering figures…" /> : error ? (
+            <EmptyState title="The dashboard could not be loaded" message={(error as Error).message} action={<Button onClick={() => refetch()}>Try again</Button>} />
+          ) : data && (
+            <div className="space-y-6">
+              {data._cached && <p className="rounded-lg bg-gold-50 px-4 py-2 text-xs text-gold-900 dark:bg-gold-900/30 dark:text-gold-100">Offline: showing figures from {dateTime(data.generated_at)}.</p>}
+              <div className="grid gap-6 lg:grid-cols-3">
+                <div className="space-y-6 lg:col-span-2">{DASHBOARD_SECTIONS.slice(0, 1).map((s) => <s.component key={s.key} data={data} />)}</div>
+                <AttentionSection data={data} />
+              </div>
+              {DASHBOARD_SECTIONS.slice(1).map((s) => <s.component key={s.key} data={data} />)}
+              <p className="text-right text-xs text-slate-400">Figures computed from live records at {dateTime(data.generated_at)}.</p>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

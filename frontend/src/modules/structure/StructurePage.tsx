@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
@@ -11,6 +11,8 @@ import { UNIT_LABELS, useOrgUnits } from '@/lib/queries';
 import { date, dateTime, titleCase } from '@/lib/format';
 import { UnitForm } from './UnitForm';
 import { unitPanels } from './panels';
+
+const BranchMap = lazy(() => import('@/components/BranchMap'));
 
 const PLURAL: Record<string, string> = { region: 'regions', district: 'districts', branch: 'branches', congregation: 'congregations' };
 const ICONS = { headquarters: Landmark, region: Globe2, district: Building2, branch: Church, congregation: Building };
@@ -180,6 +182,7 @@ export default function StructurePage() {
   const [filter, setFilter] = useState('');
   const [creating, setCreating] = useState(false);
   const tree = useMemo(() => buildTree(units || []), [units]);
+  const view = params.get('view') === 'map' ? 'map' : 'tree';
   const selectedId = params.get('unit') || tree[0]?.id;
   const selected = units?.find((u) => u.id === selectedId);
   const counts = useMemo(() => {
@@ -204,7 +207,20 @@ export default function StructurePage() {
           );
         })}
       </div>
-      {isLoading ? <PageLoader /> : (
+      <Tabs value={view} onChange={(v) => { const n = new URLSearchParams(params); if (v === 'map') n.set('view', 'map'); else n.delete('view'); setParams(n); }}
+        tabs={[{ value: 'tree', label: 'Organisation' }, { value: 'map', label: 'Branch map' }]} />
+      {view === 'map' ? (
+        <Card>
+          <CardBody>
+            <Suspense fallback={<PageLoader />}>
+              <BranchMap height={520} branches={(units || []).filter((u) => ['branch', 'congregation'].includes(u.unit_type)).map((u) => ({ ...u, latitude: u.latitude ? Number(u.latitude) : null, longitude: u.longitude ? Number(u.longitude) : null }))} />
+            </Suspense>
+            <p className="mt-3 text-xs text-slate-500">
+              {(units || []).filter((u) => ['branch', 'congregation'].includes(u.unit_type) && !u.latitude).length} branch(es) without coordinates are not shown — add latitude/longitude on the branch profile.
+            </p>
+          </CardBody>
+        </Card>
+      ) : isLoading ? <PageLoader /> : (
         <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
           <Card className="self-start">
             <CardHeader title="Organisation tree" />

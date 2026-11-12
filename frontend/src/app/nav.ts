@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { Building2, KeyRound, LayoutDashboard, ScrollText, Settings, Users } from 'lucide-react';
+import { ArrowRightLeft, Building2, KeyRound, LayoutDashboard, ScrollText, Settings, UserRoundCheck, Users } from 'lucide-react';
 
 export interface NavItem {
   to: string;
@@ -20,7 +20,11 @@ export const NAV: NavGroup[] = [
   },
   {
     label: 'Church',
-    items: [{ to: '/structure', label: 'Church structure', icon: Building2, perm: 'org.view' }],
+    items: [
+      { to: '/structure', label: 'Church structure', icon: Building2, perm: 'org.view' },
+      { to: '/members', label: 'Membership', icon: UserRoundCheck, perm: 'members.view' },
+      { to: '/members/transfers', label: 'Member transfers', icon: ArrowRightLeft, perm: 'members.view' },
+    ],
   },
   {
     label: 'Administration',

@@ -12,6 +12,7 @@ from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.db.models import F, Value
 from django.db.models.functions import Concat, Substr
+from django.utils import timezone
 
 from apps.core.models import BaseModel, SyncModel
 
@@ -159,3 +160,53 @@ class OrgUnitHistory(BaseModel):
 
     class Meta:
         ordering = ["-created_at"]
+
+
+class LeadershipPosition(BaseModel):
+    """An office such as Pastor-in-Charge or District Overseer. Optionally
+    grants a system role to the appointee for the unit they lead."""
+
+    code = models.SlugField(max_length=60, unique=True)
+    title = models.CharField(max_length=120)
+    unit_type = models.CharField(max_length=20, choices=UnitType.choices, blank=True, default="",
+                                 help_text="Level this position applies to (blank = any).")
+    grants_role = models.ForeignKey("accounts.Role", null=True, blank=True, on_delete=models.PROTECT,
+                                    related_name="positions")
+    is_head = models.BooleanField(default=False, help_text="Leader-in-charge of the unit (one at a time).")
+    sort_order = models.PositiveSmallIntegerField(default=100)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["sort_order", "title"]
+
+    def __str__(self):
+        return self.title
+
+
+class LeadershipAppointment(SyncModel):
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        ENDED = "ended", "Ended"
+
+    position = models.ForeignKey(LeadershipPosition, on_delete=models.PROTECT, related_name="appointments")
+    org_unit = models.ForeignKey(OrgUnit, on_delete=models.PROTECT, related_name="appointments")
+    user = models.ForeignKey("accounts.User", null=True, blank=True, on_delete=models.PROTECT,
+                             related_name="appointments")
+    member = models.ForeignKey("members.Member", null=True, blank=True, on_delete=models.PROTECT,
+                               related_name="appointments")
+    person_name = models.CharField(max_length=200, help_text="Name of the appointee as it appears on the letter.")
+    starts_on = models.DateField(default=timezone.localdate)
+    ends_on = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=8, choices=Status.choices, default=Status.ACTIVE, db_index=True)
+    appointed_by = models.CharField(max_length=200, blank=True, default="",
+                                    help_text="Authorising officer, e.g. the General Overseer.")
+    role_assignment = models.OneToOneField("accounts.RoleAssignment", null=True, blank=True,
+                                           on_delete=models.SET_NULL, related_name="appointment")
+    end_reason = models.TextField(blank=True, default="")
+    notes = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ["-starts_on"]
+
+    def __str__(self):
+        return f"{self.position} – {self.person_name} ({self.org_unit.name})"

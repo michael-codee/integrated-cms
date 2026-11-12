@@ -23,6 +23,8 @@ api = [
     path("", include("apps.organization.urls")),
     path("", include("apps.configuration.urls")),
     path("", include("apps.audit.urls")),
+    path("", include("apps.members.urls")),
+    path("", include("apps.dashboard.urls")),
     path("schema/", SpectacularAPIView.as_view(), name="schema"),
     path("docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="api-docs"),
 ]

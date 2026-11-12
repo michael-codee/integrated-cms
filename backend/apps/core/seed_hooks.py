@@ -5,6 +5,7 @@ from django.apps import apps
 
 SEED_FUNCTIONS = [
     # ("app_label", "dotted.path.to.function")
+    ("organization", "apps.organization.leadership.seed_positions"),
 ]
 
 

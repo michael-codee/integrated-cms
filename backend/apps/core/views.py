@@ -1,6 +1,7 @@
 """Base API views that apply jurisdiction scoping, permissions and auditing."""
-from rest_framework import permissions, viewsets
-from rest_framework.exceptions import PermissionDenied
+from rest_framework import permissions, status, viewsets
+from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.response import Response
 
 from apps.audit import services as audit
 from apps.audit.models import AuditLog
@@ -85,6 +86,42 @@ class ScopedModelViewSet(ScopedViewMixin, viewsets.ModelViewSet):
             value = instance_or_data.get(field)
             return getattr(value, "pk", value)
         return getattr(instance_or_data, attr, None)
+
+    def update(self, request, *args, **kwargs):
+        conflict = self.check_version(request)
+        if conflict is not None:
+            return conflict
+        return super().update(request, *args, **kwargs)
+
+    def check_version(self, request):
+        """Optimistic concurrency: an ``If-Match: <version>`` header that no longer
+        matches the stored version means someone else changed the record since
+        the client last saw it. Nothing is overwritten; the conflict is recorded
+        for the Sync Centre and the server copy is returned."""
+        header = request.META.get("HTTP_IF_MATCH", "").strip().strip('"').removeprefix("W/").strip('"')
+        if not header:
+            return None
+        instance = self.get_object()
+        current = getattr(instance, "version", None)
+        if current is None:
+            return None
+        try:
+            base = int(header)
+        except ValueError as exc:
+            raise ValidationError({"detail": "If-Match must be the record version number."}) from exc
+        if base == current:
+            return None
+        from apps.sync.services import record_conflict
+
+        server = self.get_serializer(instance).data
+        conflict = record_conflict(
+            request, entity=self.basename or self.module, instance=instance, payload=dict(request.data),
+            base_version=base, server_data=server,
+            reason=f"Changed by someone else (version {base} on the device, {current} on the server).")
+        return Response({"detail": "This record was changed by someone else after you last loaded it. "
+                                   "Nothing was overwritten. Review both versions in the Sync Centre.",
+                         "code": "version_conflict", "conflict": conflict.pk, "server": server},
+                        status=status.HTTP_409_CONFLICT)
 
     def perform_create(self, serializer):
         unit = self._unit_of(serializer.validated_data)

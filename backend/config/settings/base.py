@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     "apps.attendance",
     "apps.notifications",
     "apps.dashboard",
+    "apps.sync",
 ]
 
 MIDDLEWARE = [
@@ -69,6 +70,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "apps.audit.middleware.RequestContextMiddleware",
+    "apps.sync.middleware.IdempotencyMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"

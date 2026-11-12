@@ -49,6 +49,8 @@ INSTALLED_APPS = [
     "apps.accounts",
     "apps.configuration",
     "apps.members",
+    "apps.finance",
+    "apps.assets",
     "apps.dashboard",
 ]
 

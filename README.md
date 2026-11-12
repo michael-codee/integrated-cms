@@ -16,7 +16,17 @@ areas with poor connectivity can keep working and synchronise later.
 |---|---|
 | Backend | Django 5.2 + Django REST Framework, PostgreSQL 16 |
 | Frontend | React 18 + TypeScript (Vite), Tailwind CSS, Recharts, Dexie (IndexedDB), Workbox |
-| Docs | [Architecture & database design](docs/ARCHITECTURE.md) · [Development log](DEVELOPMENT_LOG.md) |
+| Docs | [Architecture & database design](docs/ARCHITECTURE.md) · [Deployment](docs/DEPLOYMENT.md) · [Backup & restore](docs/BACKUP_AND_RESTORE.md) · [User manual](docs/USER_MANUAL.md) · [Administrator manual](docs/ADMIN_MANUAL.md) · [API](docs/API.md) · [Development log](DEVELOPMENT_LOG.md) |
+
+## Production (Docker)
+
+```bash
+cp .env.example .env            # set the secret key, domain, database password, SMTP
+docker compose up -d --build    # PostgreSQL, API, HTTPS web server, housekeeping, nightly backups
+docker compose exec api python manage.py provision_admin --role system_admin
+```
+
+Full instructions, security notes and troubleshooting: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Quick start (development)
 
@@ -51,6 +61,7 @@ and General Overseer are created with `provision_admin` during installation.
 cd backend && python -m pytest          # API, permissions, scoping, finance rules…
 cd frontend && npx vitest run           # unit tests
 cd frontend && npx tsc -b               # type check
+cd frontend && npm run build && npx playwright test   # offline end-to-end test (needs the API running)
 ```
 
 ## Repository layout
@@ -58,5 +69,6 @@ cd frontend && npx tsc -b               # type check
 ```
 backend/    Django project (config/, apps/<module>/)
 frontend/   React PWA (src/app, src/modules/<module>, src/offline, src/components/ui)
-docs/       Architecture and guides
+docs/       Architecture, deployment, backup, manuals, API
+deploy/     Backup and restore scripts
 ```

@@ -94,7 +94,8 @@ class SyncManager(models.Manager.from_queryset(SyncQuerySet)):
 
 class SyncModel(SoftDeleteModel):
     version = models.PositiveIntegerField(default=1)
-    sync_seq = models.BigIntegerField(default=0, db_index=True, editable=False)
+    # A callable default (not 0) so bulk_create also gives every row a cursor position.
+    sync_seq = models.BigIntegerField(default=next_sync_seq, db_index=True, editable=False)
     device_id = models.CharField(max_length=64, blank=True, default="")
     client_created_at = models.DateTimeField(null=True, blank=True)
     client_updated_at = models.DateTimeField(null=True, blank=True)

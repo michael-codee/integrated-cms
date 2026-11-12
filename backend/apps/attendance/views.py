@@ -1,6 +1,8 @@
 import datetime
 
 import django_filters
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
 from rest_framework import permissions
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
@@ -55,6 +57,7 @@ class AttendanceViewSet(ExportMixin, ScopedModelViewSet):
 class AttendanceStatsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(responses=OpenApiTypes.OBJECT)
     def get(self, request):
         if not scoping.has_perm_anywhere(request.user, "attendance.view"):
             raise PermissionDenied("You do not have access to attendance.")

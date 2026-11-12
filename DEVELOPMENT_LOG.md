@@ -146,3 +146,64 @@ known limitations, phase by phase.
 
 - Notifications are in-app only. E-mail/SMS delivery can subscribe to the same domain events later (SMTP is already configurable).
 - Recurring programs (e.g. every Sunday) are not generated automatically; regular services are captured through attendance records by service type.
+
+## Phase 5 — Offline sync, reporting & documents  ✅
+
+**Completed — offline synchronisation (`apps/sync`, `frontend/src/offline`)**
+
+- Every change made on a device goes into an on-device outbox with a client-generated ID and an `Idempotency-Key`. The server stores the response per user and key, so a request replayed after a dropped connection is answered from the stored result and never creates a second record.
+- Updates carry the version the device last saw (`If-Match`). If someone changed the record in the meantime the server refuses with *409 version conflict*, returns its copy and records a conflict. The Sync Centre shows both versions field by field; the user keeps the server copy or re-applies their change. Re-applying is blocked for finance entries that are approved or locked, so synchronisation can never overwrite approved financial data.
+- Pull feed (`/api/sync/pull/`) per entity with a cursor, limited to the user's jurisdiction, including deletions, so devices keep an up-to-date local copy.
+- Header indicator (pending changes, last sync, failures); Sync Centre with queue, history, conflicts and registered devices; retry and discard per change; sign-out warns before discarding unsynchronised changes.
+- Bugs found and fixed along the way: the outbox failed to save while offline (a read happened inside the IndexedDB transaction); lazily loaded screens failed offline on the first visit (the service worker now takes control immediately); rows created in bulk had no sync cursor and were missing from the pull feed (cursor now assigned by default, existing rows backfilled by migration).
+- End-to-end browser test (`frontend/e2e/offline.spec.ts`): record attendance while offline, reconnect, confirm exactly one record on the server.
+
+**Completed — hierarchical reporting & compliance (`apps/reports`)**
+
+- Configurable report templates (frequency, unit types, due days, narrative questions). Seeded: branch monthly, district monthly, regional quarterly and annual reports.
+- Figures (members, attendance, finance, programs) are computed from the records for the period and **frozen on submission**; narrative answers are added by the unit. The unit above reviews: accept, or return with a reason.
+- Compliance view per period: submitted on time, late, overdue or not started for every unit below; export to PDF/Excel/CSV; PDF of each report with the church logo. Dashboard section and attention items for due and awaiting reports.
+
+**Completed — documents & records (`apps/documents`)**
+
+- Documents (certificates, title deeds, minutes, policies, letters…) stored **outside the web root** and served only through the API after a permission check. Each upload is a new immutable version with its SHA-256 checksum; downloads are audited and sent with a sandboxing content policy. Restricted documents are visible only to holders of `documents.edit` in that unit. Expiry dates and archiving.
+- Uploads are limited by size and extension (`MAX_UPLOAD_MB`, `ALLOWED_UPLOAD_EXTENSIONS`).
+
+**Tests:** 134 backend tests (adds idempotent replay, version conflicts, conflict resolution permissions, pull-feed jurisdiction and tombstones, report figures, submission freezing, review at the parent unit, compliance, documents access, versions and private download) plus the offline browser test.
+
+**Known limitations / outstanding**
+
+- The member register and document uploads need a connection; head counts, members, finance entries and assets work offline.
+
+---
+
+## Phase 6 — Security review, deployment, backups & documentation  ✅
+
+**Security review — findings and fixes**
+
+- *Uploaded files were reachable by URL.* Member photos, finance supporting documents and asset documents lived under `/media/` with random names but no access check. They are now never served by the web server: serializers return short-lived signed links (`/api/files/<token>/`, `FILE_URL_MAX_AGE`, default 1 hour) that are only issued to someone allowed to see the record; responses carry `nosniff`, a sandboxing CSP and `Cross-Origin-Resource-Policy`. Documents & records were already in separate private storage with permission-checked, audited downloads.
+- *API documentation was public.* In production `/api/docs/` and `/api/schema/` now require a staff session unless `API_DOCS_PUBLIC=true`. The schema now declares the JWT scheme and response types for summary endpoints.
+- *No retention for technical records.* New `purge_expired` command (run daily by the `housekeeping` container) removes old idempotency records, used/expired password-reset links, expired refresh tokens and old read notifications. Church records, finance, sync conflicts and the audit trail are never purged.
+- Reviewed and confirmed: server-side permission and jurisdiction checks on every endpoint (out-of-jurisdiction records return 404); Argon2 hashing; lockout and rate limits; refresh token in an httpOnly SameSite=Strict cookie with a custom-header CSRF guard; generic answers on sign-in and password reset; database-level immutability of approved finance and the audit trail; upload content checks; `manage.py check --deploy` clean apart from HSTS preload (deliberately not enabled).
+- Web server headers (Caddy): HSTS, strict Content-Security-Policy (self only, plus OpenStreetMap tiles), `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`; request size limit; no-cache for the service worker and app shell so updates reach devices.
+
+**Deployment**
+
+- `docker-compose.yml`: PostgreSQL 16 (not published on the host), API (gunicorn, non-root user, migrations and idempotent seed on start, health check), Caddy web server with automatic HTTPS, `housekeeping` and `backup` containers. Named volumes for the database, public uploads and private documents.
+- `deploy/backup.sh`: nightly `pg_dump` (custom format) + archive of all uploads + SHA-256 checksums, retention by `BACKUP_KEEP_DAYS`. `deploy/restore.sh`: verifies checksums, asks for confirmation, restores database and files, restarts.
+- **Verified locally:** the stack builds and starts; first administrator provisioned with `provision_admin`; sign-in through Caddy; member photo upload served only via signed link (`/media/...` not reachable); Django admin static files; backup written; restore round trip (a member created after the backup disappeared after restore, the photo file came back with the right owner, sign-in still worked).
+
+**Documentation**
+
+- `docs/DEPLOYMENT.md` (server, configuration, first accounts, updates, security notes, retention, troubleshooting), `docs/BACKUP_AND_RESTORE.md`, `docs/USER_MANUAL.md` (by task, including offline work and the Sync Centre), `docs/ADMIN_MANUAL.md` (roles and jurisdiction, users, settings, approval rules, audit, security routine), `docs/API.md` (authentication, sync protocol, conventions, resources).
+
+**Tests:** 139 backend tests (adds signed-link serving, tampered/expired/traversal links refused, `/media` not served, photos returned as signed links, retention keeps recent records and the audit trail) + 5 frontend unit tests + the offline end-to-end browser test.
+
+**Known limitations / outstanding (whole system)**
+
+- Offline sign-in relies on the cached session for up to 7 days after the last online sign-in on that device; there is no separate offline PIN, so devices must have a screen lock. A lost device should have its account suspended at once.
+- Notifications are in-app only (no email/SMS delivery yet); recurring programs are not generated automatically.
+- Finance is single-entry income/expenditure by category, not a double-entry general ledger.
+- The member attendance register, uploads and all approvals need a connection.
+- Backups are written on the same server; copying them off-site is a manual step described in the backup guide.
+- The Docker stack was verified on a single test machine with plain HTTP; HTTPS certificate issuance depends on the real domain and DNS at installation.

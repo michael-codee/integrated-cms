@@ -1,8 +1,8 @@
-import { Select } from './ui';
+import { labellable, Select } from './ui';
 import { useOrgUnits, UNIT_LABELS } from '@/lib/queries';
 
 /** Picks an org unit from the user's jurisdiction. `types` limits the choices. */
-export function UnitSelect({ value, onChange, types, placeholder = 'All units', allowEmpty = true, invalid, className, id }: {
+export const UnitSelect = labellable(function UnitSelect({ value, onChange, types, placeholder = 'All units', allowEmpty = true, invalid, className, id }: {
   value: string; onChange: (v: string) => void; types?: string[]; placeholder?: string; allowEmpty?: boolean; invalid?: boolean; className?: string; id?: string;
 }) {
   const { data: units = [] } = useOrgUnits();
@@ -20,4 +20,4 @@ export function UnitSelect({ value, onChange, types, placeholder = 'All units', 
       ))}
     </Select>
   );
-}
+});

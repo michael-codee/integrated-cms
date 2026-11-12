@@ -1,4 +1,6 @@
 from django.db.models import Count, Q
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -113,6 +115,7 @@ class BranchDirectoryView(APIView):
     """Names of all active branches/congregations (no other details), so an
     officer can choose a receiving branch for a transfer or a program."""
 
+    @extend_schema(responses=OpenApiTypes.OBJECT)
     def get(self, request):
         units = OrgUnit.objects.filter(unit_type__in=["branch", "congregation"], status="active").select_related(
             "parent").order_by("name")

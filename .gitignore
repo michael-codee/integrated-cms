@@ -22,7 +22,7 @@ frontend/playwright-report/
 *.env.local
 
 # Backups
-backups/*.sql.gz
+backups/
 
 # OS / editors
 .DS_Store
@@ -30,3 +30,5 @@ backups/*.sql.gz
 .vscode/
 *.tsbuildinfo
 *.log
+test-results/
+backend/private-media/

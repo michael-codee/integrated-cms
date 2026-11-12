@@ -56,6 +56,9 @@ INSTALLED_APPS = [
     "apps.attendance",
     "apps.notifications",
     "apps.dashboard",
+    "apps.sync",
+    "apps.reports",
+    "apps.documents",
 ]
 
 MIDDLEWARE = [
@@ -69,6 +72,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "apps.audit.middleware.RequestContextMiddleware",
+    "apps.sync.middleware.IdempotencyMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -126,6 +130,11 @@ STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = Path(env("MEDIA_ROOT", str(BASE_DIR / "media")))
+# Uploaded files are served only through short-lived signed links (apps.core.files), never by the
+# web server. FILE_URL_MAX_AGE is how long such a link works, in seconds.
+FILE_URL_MAX_AGE = env("FILE_URL_MAX_AGE", 3600, int)
+# Documents & records are stored here and only served through the API (never by the web server).
+PRIVATE_MEDIA_ROOT = Path(env("PRIVATE_MEDIA_ROOT", str(BASE_DIR / "private-media")))
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -213,6 +222,10 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 MAX_UPLOAD_MB = env("MAX_UPLOAD_MB", 10, int)
 ALLOWED_UPLOAD_EXTENSIONS = ["pdf", "png", "jpg", "jpeg", "webp", "doc", "docx", "xls", "xlsx", "csv", "txt"]
+
+# Retention (purge_expired). The audit trail and church records are never purged.
+IDEMPOTENCY_KEEP_DAYS = env("IDEMPOTENCY_KEEP_DAYS", 30, int)
+NOTIFICATION_KEEP_DAYS = env("NOTIFICATION_KEEP_DAYS", 180, int)
 
 # Demo data (never in production)
 ALLOW_DEMO_DATA = env("ALLOW_DEMO_DATA", False, bool)

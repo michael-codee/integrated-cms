@@ -23,3 +23,13 @@ STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
 }
+
+# API documentation (/api/docs/, /api/schema/) is only shown to staff signed in to /django-admin/
+# unless API_DOCS_PUBLIC=true. The schema reveals no data, but there is no reason to publish it.
+if not env("API_DOCS_PUBLIC", False, bool):
+    SPECTACULAR_SETTINGS = {
+        **SPECTACULAR_SETTINGS,  # noqa: F405
+        "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAdminUser"],
+        "SERVE_AUTHENTICATION": ["rest_framework.authentication.SessionAuthentication",
+                                 "apps.accounts.authentication.CMISJWTAuthentication"],
+    }

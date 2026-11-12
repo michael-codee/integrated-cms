@@ -7,6 +7,7 @@
  * API data is NOT cached here — offline data lives in IndexedDB, scoped to the
  * signed-in user and wiped on sign-out.
  */
+import { clientsClaim } from 'workbox-core';
 import { cleanupOutdatedCaches, createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
 import { CacheFirst } from 'workbox-strategies';
@@ -15,6 +16,8 @@ import { ExpirationPlugin } from 'workbox-expiration';
 declare const self: ServiceWorkerGlobalScope & { __WB_MANIFEST: Array<{ url: string; revision: string | null }> };
 
 cleanupOutdatedCaches();
+// Take control of the page that installed us, so the very first visit already works offline.
+clientsClaim();
 precacheAndRoute(self.__WB_MANIFEST);
 
 registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html'), { denylist: [/^\/api\//, /^\/media\//, /^\/django-admin\//] }));

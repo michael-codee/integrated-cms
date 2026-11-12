@@ -68,6 +68,7 @@ export async function submitChange<T = Record<string, unknown>>(req: ChangeReque
     const now = new Date().toISOString();
     const existing = await db.records.get([req.entity, req.recordId]);
     const merged: Record<string, unknown> = { ...(existing?.data || {}), ...(req.body || {}), id: req.recordId };
+    const userId = await currentUserId(); // read outside the transaction: it uses the meta table
     await db.transaction('rw', db.records, db.outbox, async () => {
       if (req.op !== 'action') {
         await db.records.put({
@@ -78,7 +79,7 @@ export async function submitChange<T = Record<string, unknown>>(req: ChangeReque
       await db.outbox.add({
         changeId, entity: req.entity, recordId: req.recordId, op: req.op, method: req.method, url: req.url,
         body: req.body, baseVersion: req.baseVersion, label: req.label, status: 'pending', attempts: 0,
-        createdAt: now, updatedAt: now, userId: await currentUserId(), deviceId: getDeviceId(),
+        createdAt: now, updatedAt: now, userId, deviceId: getDeviceId(),
       });
     });
     window.dispatchEvent(new CustomEvent('cmis:outbox-changed'));

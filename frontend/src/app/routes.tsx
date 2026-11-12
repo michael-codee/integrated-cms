@@ -30,6 +30,7 @@ const DepartmentsPage = lazy(() => import('@/modules/departments/DepartmentsPage
 const DepartmentDetailPage = lazy(() => import('@/modules/departments/DepartmentDetailPage'));
 const NotificationsPage = lazy(() => import('@/modules/notifications/NotificationsPage'));
 const AnnouncementsPage = lazy(() => import('@/modules/notifications/AnnouncementsPage'));
+const SyncCentrePage = lazy(() => import('@/modules/sync/SyncCentrePage'));
 const UsersPage = lazy(() => import('@/modules/admin/UsersPage'));
 const RolesPage = lazy(() => import('@/modules/admin/RolesPage'));
 const SettingsPage = lazy(() => import('@/modules/admin/SettingsPage'));
@@ -78,6 +79,7 @@ export const router = createBrowserRouter([
       { path: 'departments/:id', element: guarded('departments.view', <DepartmentDetailPage />) },
       { path: 'notifications', element: s(<NotificationsPage />) },
       { path: 'announcements', element: s(<AnnouncementsPage />) },
+      { path: 'sync', element: s(<SyncCentrePage />) },
       { path: 'admin/users', element: guarded('users.view', <UsersPage />) },
       { path: 'admin/roles', element: guarded('roles.edit', <RolesPage />) },
       { path: 'admin/settings', element: guarded('settings.edit', <SettingsPage />) },

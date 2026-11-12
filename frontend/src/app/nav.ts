@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { ArrowRightLeft, Bell, Boxes, CalendarCheck, CalendarDays, HandHeart, Megaphone, Building2, ClipboardCheck, KeyRound, Landmark, LayoutDashboard, ListChecks, PiggyBank, Receipt, ScrollText, Settings, ShieldCheck, UserRoundCheck, Users } from 'lucide-react';
+import { ArrowRightLeft, Bell, RefreshCcw, Boxes, CalendarCheck, CalendarDays, HandHeart, Megaphone, Building2, ClipboardCheck, KeyRound, Landmark, LayoutDashboard, ListChecks, PiggyBank, Receipt, ScrollText, Settings, ShieldCheck, UserRoundCheck, Users } from 'lucide-react';
 
 export interface NavItem {
   to: string;
@@ -16,7 +16,7 @@ export interface NavGroup {
 export const NAV: NavGroup[] = [
   {
     label: 'Overview',
-    items: [{ to: '/', label: 'Dashboard', icon: LayoutDashboard }],
+    items: [{ to: '/', label: 'Dashboard', icon: LayoutDashboard }, { to: '/sync', label: 'Sync Centre', icon: RefreshCcw }],
   },
   {
     label: 'Church',

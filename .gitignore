@@ -30,3 +30,4 @@ backups/*.sql.gz
 .vscode/
 *.tsbuildinfo
 *.log
+test-results/

@@ -1,12 +1,13 @@
 from django.utils import timezone
 from rest_framework import serializers
 
+from apps.core.files import SignedFilesMixin
 from apps.organization.models import OrgUnit
 
 from .models import BaptismRecord, Member, MembershipHistory, MemberTransfer
 
 
-class MemberSerializer(serializers.ModelSerializer):
+class MemberSerializer(SignedFilesMixin, serializers.ModelSerializer):
     id = serializers.UUIDField(required=False)
     full_name = serializers.CharField(read_only=True)
     age = serializers.IntegerField(read_only=True)

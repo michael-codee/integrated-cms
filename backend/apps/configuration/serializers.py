@@ -1,10 +1,11 @@
 from rest_framework import serializers
 
+from apps.core.files import SignedFilesMixin
 from .models import (AssetCategory, Currency, DocumentCategory, FinanceCategory, FinancialYear, MembershipCategory,
                      ProgramCategory, ServiceType, SystemSetting)
 
 
-class SystemSettingSerializer(serializers.ModelSerializer):
+class SystemSettingSerializer(SignedFilesMixin, serializers.ModelSerializer):
     class Meta:
         model = SystemSetting
         exclude = ["created_by", "updated_by"]
@@ -26,7 +27,7 @@ class SystemSettingSerializer(serializers.ModelSerializer):
         return value
 
 
-class PublicSettingSerializer(serializers.ModelSerializer):
+class PublicSettingSerializer(SignedFilesMixin, serializers.ModelSerializer):
     class Meta:
         model = SystemSetting
         fields = ["ministry_name", "alternate_name", "short_name", "motto", "guiding_scripture", "logo",

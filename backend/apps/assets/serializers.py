@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from apps.core.files import SignedFilesMixin
 from apps.finance.serializers import ClientIdMixin
 from apps.organization.models import OrgUnit
 
@@ -7,7 +8,7 @@ from . import services
 from .models import Asset, AssetDisposal, AssetMovement, MaintenanceRecord
 
 
-class AssetListSerializer(serializers.ModelSerializer):
+class AssetListSerializer(SignedFilesMixin, serializers.ModelSerializer):
     category_name = serializers.CharField(source="category.name", read_only=True)
     org_unit_name = serializers.CharField(source="org_unit.name", read_only=True)
     book_value = serializers.SerializerMethodField()

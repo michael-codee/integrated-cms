@@ -1,5 +1,7 @@
 import datetime
 
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -23,6 +25,7 @@ class DashboardView(APIView):
     """Role-adaptive executive dashboard. Every figure comes from live queries
     restricted to the caller's jurisdiction (and the optional filters)."""
 
+    @extend_schema(responses=OpenApiTypes.OBJECT)
     def get(self, request):
         if not scoping.has_perm_anywhere(request.user, "dashboard.view"):
             return Response({"detail": "You do not have access to the dashboard."}, status=403)

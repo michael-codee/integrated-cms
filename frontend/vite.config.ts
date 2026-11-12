@@ -36,9 +36,9 @@ export default defineConfig({
   ],
   server: {
     port: 5173,
-    proxy: { '/api': { target: apiTarget, changeOrigin: false }, '/media': { target: apiTarget } },
+    proxy: { '/api': { target: apiTarget, changeOrigin: false } },
   },
-  preview: { port: 4173, proxy: { '/api': { target: apiTarget }, '/media': { target: apiTarget } } },
+  preview: { port: 4173, proxy: { '/api': { target: apiTarget } } },
   build: {
     chunkSizeWarningLimit: 1200,
     rollupOptions: {

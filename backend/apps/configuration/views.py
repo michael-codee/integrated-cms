@@ -1,3 +1,5 @@
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -48,6 +50,7 @@ class SystemSettingView(APIView):
     def get_permissions(self):
         return [permissions.IsAuthenticated()]
 
+    @extend_schema(responses=OpenApiTypes.OBJECT)
     def get(self, request):
         return Response(SystemSettingSerializer(SystemSetting.get(), context={"request": request}).data)
 
@@ -69,6 +72,7 @@ class PublicSettingView(APIView):
     authentication_classes = []
     permission_classes = [permissions.AllowAny]
 
+    @extend_schema(responses=OpenApiTypes.OBJECT)
     def get(self, request):
         return Response(PublicSettingSerializer(SystemSetting.get(), context={"request": request}).data)
 

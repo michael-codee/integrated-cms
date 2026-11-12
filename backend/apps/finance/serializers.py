@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from apps.core.files import SignedFilesMixin
 from apps.core import scoping
 
 from . import services
@@ -100,7 +101,7 @@ class ClientIdMixin(serializers.Serializer):
         return value
 
 
-class TransactionSerializer(ClientIdMixin, serializers.ModelSerializer):
+class TransactionSerializer(SignedFilesMixin, ClientIdMixin, serializers.ModelSerializer):
     org_unit_name = serializers.CharField(source="org_unit.name", read_only=True)
     account_name = serializers.CharField(source="account.name", read_only=True)
     category_name = serializers.CharField(source="category.name", read_only=True)

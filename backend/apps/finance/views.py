@@ -5,6 +5,7 @@ from django.db.models.functions import TruncMonth
 from django.http import HttpResponse
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
+from drf_spectacular.types import OpenApiTypes
 from rest_framework import mixins, permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -297,6 +298,7 @@ def finance_summary(user, unit=None, start=None, end=None):
 class FinanceSummaryView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(responses=OpenApiTypes.OBJECT)
     def get(self, request):
         if not scoping.has_perm_anywhere(request.user, "finance.view"):
             raise PermissionDenied("You do not have finance access.")

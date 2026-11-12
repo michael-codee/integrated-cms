@@ -1,6 +1,7 @@
 from django.db.models import Q
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
+from drf_spectacular.types import OpenApiTypes
 from rest_framework import mixins, permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -42,6 +43,7 @@ class PullView(APIView):
 
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(responses=OpenApiTypes.OBJECT)
     def get(self, request):
         entity = request.query_params.get("entity")
         if entity not in feed.ENTITY_NAMES:
@@ -63,6 +65,7 @@ class PullView(APIView):
 class StatusView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(responses=OpenApiTypes.OBJECT)
     def get(self, request):
         touch_device(request)
         return Response({

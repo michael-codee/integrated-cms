@@ -4,6 +4,7 @@ import django_filters
 from django.http import HttpResponse
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
+from drf_spectacular.types import OpenApiTypes
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -137,6 +138,7 @@ class ComplianceView(APIView):
 
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(responses=OpenApiTypes.OBJECT)
     def get(self, request):
         template = ReportTemplate.objects.filter(pk=request.query_params.get("template")).first() \
             if request.query_params.get("template") else ReportTemplate.objects.filter(is_active=True).first()
@@ -183,6 +185,7 @@ class DueView(APIView):
 
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(responses=OpenApiTypes.OBJECT)
     def get(self, request):
         return Response(due_reports(request.user))
 

@@ -1,6 +1,7 @@
 import django_filters
 from django.db.models import Q
 from drf_spectacular.utils import extend_schema
+from drf_spectacular.types import OpenApiTypes
 from rest_framework import mixins, permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
@@ -197,6 +198,7 @@ class DisposalViewSet(ScopedViewMixin, mixins.ListModelMixin, mixins.RetrieveMod
 class AssetSummaryView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(responses=OpenApiTypes.OBJECT)
     def get(self, request):
         if not scoping.has_perm_anywhere(request.user, "assets.view"):
             raise PermissionDenied("You do not have access to the asset register.")

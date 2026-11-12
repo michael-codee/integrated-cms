@@ -1,0 +1,226 @@
+"""
+Base settings for the RLWM Church Management Information System.
+
+Environment-specific modules (dev, test, prod) import from here. All secrets and
+host-specific values come from environment variables (see ../../.env.example).
+"""
+from datetime import timedelta
+from pathlib import Path
+import os
+
+from dotenv import load_dotenv
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+load_dotenv(BASE_DIR.parent / ".env")
+
+
+def env(name, default=None, cast=str):
+    value = os.environ.get(name)
+    if value is None or value == "":
+        return default
+    if cast is bool:
+        return value.lower() in ("1", "true", "yes", "on")
+    if cast is list:
+        return [v.strip() for v in value.split(",") if v.strip()]
+    return cast(value)
+
+
+SECRET_KEY = env("DJANGO_SECRET_KEY", "insecure-development-key-change-me")
+DEBUG = env("DJANGO_DEBUG", False, bool)
+ALLOWED_HOSTS = env("DJANGO_ALLOWED_HOSTS", ["localhost", "127.0.0.1"], list)
+
+INSTALLED_APPS = [
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    # third party
+    "rest_framework",
+    "rest_framework_simplejwt.token_blacklist",
+    "django_filters",
+    "corsheaders",
+    "drf_spectacular",
+    # CMIS apps
+    "apps.core",
+    "apps.audit",
+    "apps.organization",
+    "apps.accounts",
+    "apps.configuration",
+]
+
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "apps.audit.middleware.RequestContextMiddleware",
+]
+
+ROOT_URLCONF = "config.urls"
+
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [BASE_DIR / "templates"],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+            ],
+        },
+    },
+]
+
+WSGI_APPLICATION = "config.wsgi.application"
+
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": env("POSTGRES_DB", "cmis"),
+        "USER": env("POSTGRES_USER", "cmis"),
+        "PASSWORD": env("POSTGRES_PASSWORD", "cmis"),
+        "HOST": env("POSTGRES_HOST", "localhost"),
+        "PORT": env("POSTGRES_PORT", "5432"),
+        "CONN_MAX_AGE": env("POSTGRES_CONN_MAX_AGE", 60, int),
+        "ATOMIC_REQUESTS": True,
+    }
+}
+
+AUTH_USER_MODEL = "accounts.User"
+
+PASSWORD_HASHERS = [
+    "django.contrib.auth.hashers.Argon2PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2PasswordHasher",
+]
+
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 10}},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
+
+LANGUAGE_CODE = "en-gb"
+TIME_ZONE = "Africa/Freetown"
+USE_I18N = True
+USE_TZ = True
+
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+MEDIA_URL = "/media/"
+MEDIA_ROOT = Path(env("MEDIA_ROOT", str(BASE_DIR / "media")))
+
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# --------------------------------------------------------------------------- DRF
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": ["apps.accounts.authentication.CMISJWTAuthentication"],
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    "DEFAULT_FILTER_BACKENDS": [
+        "django_filters.rest_framework.DjangoFilterBackend",
+        "rest_framework.filters.SearchFilter",
+        "rest_framework.filters.OrderingFilter",
+    ],
+    "DEFAULT_PAGINATION_CLASS": "apps.core.pagination.StandardPagination",
+    "PAGE_SIZE": 25,
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "EXCEPTION_HANDLER": "apps.core.exceptions.exception_handler",
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": env("THROTTLE_ANON", "60/min"),
+        "user": env("THROTTLE_USER", "1200/min"),
+        "login": env("THROTTLE_LOGIN", "10/min"),
+        "password_reset": env("THROTTLE_PASSWORD_RESET", "5/hour"),
+        "export": env("THROTTLE_EXPORT", "30/hour"),
+    },
+}
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=env("JWT_ACCESS_MINUTES", 15, int)),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=env("JWT_REFRESH_DAYS", 7, int)),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "UPDATE_LAST_LOGIN": False,
+    "USER_ID_FIELD": "id",
+    "USER_ID_CLAIM": "user_id",
+    "AUTH_HEADER_TYPES": ("Bearer",),
+}
+
+# Refresh token cookie (httpOnly; never readable by JavaScript)
+REFRESH_COOKIE_NAME = "cmis_refresh"
+REFRESH_COOKIE_PATH = "/api/auth/"
+REFRESH_COOKIE_SECURE = env("REFRESH_COOKIE_SECURE", True, bool)
+REFRESH_COOKIE_SAMESITE = "Strict"
+
+# Account lockout
+LOGIN_MAX_FAILURES = env("LOGIN_MAX_FAILURES", 5, int)
+LOGIN_LOCKOUT_MINUTES = env("LOGIN_LOCKOUT_MINUTES", 15, int)
+PASSWORD_RESET_TOKEN_HOURS = env("PASSWORD_RESET_TOKEN_HOURS", 2, int)
+FRONTEND_URL = env("FRONTEND_URL", "http://localhost:5173")
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "RLWM Church Management Information System API",
+    "DESCRIPTION": "Rivers of Living Water Ministries (Holy Ghost Bible Church). "
+    "\"Let all things be done decently and in order.\" — 1 Corinthians 14:40",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
+}
+
+CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS", [], list)
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "authorization",
+    "content-type",
+    "idempotency-key",
+    "if-match",
+    "x-device-id",
+    "x-cmis-client",
+]
+CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS", [], list)
+
+EMAIL_BACKEND = env("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+EMAIL_HOST = env("EMAIL_HOST", "")
+EMAIL_PORT = env("EMAIL_PORT", 587, int)
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = env("EMAIL_USE_TLS", True, bool)
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "CMIS <no-reply@localhost>")
+
+# Uploads
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+MAX_UPLOAD_MB = env("MAX_UPLOAD_MB", 10, int)
+ALLOWED_UPLOAD_EXTENSIONS = ["pdf", "png", "jpg", "jpeg", "webp", "doc", "docx", "xls", "xlsx", "csv", "txt"]
+
+# Demo data (never in production)
+ALLOW_DEMO_DATA = env("ALLOW_DEMO_DATA", False, bool)
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "standard": {"format": "%(asctime)s %(levelname)s %(name)s %(message)s"},
+    },
+    "handlers": {
+        "console": {"class": "logging.StreamHandler", "formatter": "standard"},
+    },
+    "root": {"handlers": ["console"], "level": env("LOG_LEVEL", "INFO")},
+    "loggers": {
+        "django.db.backends": {"level": "WARNING"},
+        "cmis": {"level": env("LOG_LEVEL", "INFO"), "propagate": True},
+    },
+}

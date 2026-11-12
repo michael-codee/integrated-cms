@@ -174,3 +174,36 @@ known limitations, phase by phase.
 **Known limitations / outstanding**
 
 - The member register and document uploads need a connection; head counts, members, finance entries and assets work offline.
+
+---
+
+## Phase 6 — Security review, deployment, backups & documentation  ✅
+
+**Security review — findings and fixes**
+
+- *Uploaded files were reachable by URL.* Member photos, finance supporting documents and asset documents lived under `/media/` with random names but no access check. They are now never served by the web server: serializers return short-lived signed links (`/api/files/<token>/`, `FILE_URL_MAX_AGE`, default 1 hour) that are only issued to someone allowed to see the record; responses carry `nosniff`, a sandboxing CSP and `Cross-Origin-Resource-Policy`. Documents & records were already in separate private storage with permission-checked, audited downloads.
+- *API documentation was public.* In production `/api/docs/` and `/api/schema/` now require a staff session unless `API_DOCS_PUBLIC=true`. The schema now declares the JWT scheme and response types for summary endpoints.
+- *No retention for technical records.* New `purge_expired` command (run daily by the `housekeeping` container) removes old idempotency records, used/expired password-reset links, expired refresh tokens and old read notifications. Church records, finance, sync conflicts and the audit trail are never purged.
+- Reviewed and confirmed: server-side permission and jurisdiction checks on every endpoint (out-of-jurisdiction records return 404); Argon2 hashing; lockout and rate limits; refresh token in an httpOnly SameSite=Strict cookie with a custom-header CSRF guard; generic answers on sign-in and password reset; database-level immutability of approved finance and the audit trail; upload content checks; `manage.py check --deploy` clean apart from HSTS preload (deliberately not enabled).
+- Web server headers (Caddy): HSTS, strict Content-Security-Policy (self only, plus OpenStreetMap tiles), `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`; request size limit; no-cache for the service worker and app shell so updates reach devices.
+
+**Deployment**
+
+- `docker-compose.yml`: PostgreSQL 16 (not published on the host), API (gunicorn, non-root user, migrations and idempotent seed on start, health check), Caddy web server with automatic HTTPS, `housekeeping` and `backup` containers. Named volumes for the database, public uploads and private documents.
+- `deploy/backup.sh`: nightly `pg_dump` (custom format) + archive of all uploads + SHA-256 checksums, retention by `BACKUP_KEEP_DAYS`. `deploy/restore.sh`: verifies checksums, asks for confirmation, restores database and files, restarts.
+- **Verified locally:** the stack builds and starts; first administrator provisioned with `provision_admin`; sign-in through Caddy; member photo upload served only via signed link (`/media/...` not reachable); Django admin static files; backup written; restore round trip (a member created after the backup disappeared after restore, the photo file came back with the right owner, sign-in still worked).
+
+**Documentation**
+
+- `docs/DEPLOYMENT.md` (server, configuration, first accounts, updates, security notes, retention, troubleshooting), `docs/BACKUP_AND_RESTORE.md`, `docs/USER_MANUAL.md` (by task, including offline work and the Sync Centre), `docs/ADMIN_MANUAL.md` (roles and jurisdiction, users, settings, approval rules, audit, security routine), `docs/API.md` (authentication, sync protocol, conventions, resources).
+
+**Tests:** 139 backend tests (adds signed-link serving, tampered/expired/traversal links refused, `/media` not served, photos returned as signed links, retention keeps recent records and the audit trail) + 5 frontend unit tests + the offline end-to-end browser test.
+
+**Known limitations / outstanding (whole system)**
+
+- Offline sign-in relies on the cached session for up to 7 days after the last online sign-in on that device; there is no separate offline PIN, so devices must have a screen lock. A lost device should have its account suspended at once.
+- Notifications are in-app only (no email/SMS delivery yet); recurring programs are not generated automatically.
+- Finance is single-entry income/expenditure by category, not a double-entry general ledger.
+- The member attendance register, uploads and all approvals need a connection.
+- Backups are written on the same server; copying them off-site is a manual step described in the backup guide.
+- The Docker stack was verified on a single test machine with plain HTTP; HTTPS certificate issuance depends on the real domain and DNS at installation.

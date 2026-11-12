@@ -51,6 +51,10 @@ INSTALLED_APPS = [
     "apps.members",
     "apps.finance",
     "apps.assets",
+    "apps.departments",
+    "apps.programs",
+    "apps.attendance",
+    "apps.notifications",
     "apps.dashboard",
 ]
 

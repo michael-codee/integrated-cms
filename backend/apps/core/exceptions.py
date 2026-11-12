@@ -2,6 +2,7 @@ import logging
 
 from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import IntegrityError
 from django.db.models import ProtectedError
 from rest_framework import status
 from rest_framework.response import Response
@@ -42,6 +43,11 @@ def _handle(exc, context):
             {"detail": "This record is referenced by other records and cannot be removed."},
             status=status.HTTP_409_CONFLICT,
         )
+    if isinstance(exc, IntegrityError):
+        # Last line of defence: serializers validate uniqueness first, but two devices can race.
+        logger.warning("Integrity error turned into 409: %s", exc)
+        return Response({"detail": "This conflicts with an existing record (it may already have been entered)."},
+                        status=status.HTTP_409_CONFLICT)
     if isinstance(exc, (DjangoPermissionDenied, PermissionError)):
         return Response({"detail": str(exc) or "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
     response = drf_exception_handler(exc, context)

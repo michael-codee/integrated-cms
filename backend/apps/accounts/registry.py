@@ -113,7 +113,7 @@ DEFAULT_ROLES = [
         + _m("finance", OVERSIGHT)
         + _m("budgets", OVERSIGHT)
         + _m("reports", OVERSIGHT + ["create", "edit"])
-        + _m("programs", ["create", "edit"])
+        + _m("programs", ["create", "edit", "approve"])
         + _m("assets", ["approve", "reject"])
         + _m("org", ["create", "edit"])
         + _m("leadership", ["create", "edit"])

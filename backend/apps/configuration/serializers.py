@@ -30,7 +30,7 @@ class PublicSettingSerializer(serializers.ModelSerializer):
     class Meta:
         model = SystemSetting
         fields = ["ministry_name", "alternate_name", "short_name", "motto", "guiding_scripture", "logo",
-                  "default_currency"]
+                  "default_currency", "allow_individual_attendance"]
 
 
 class CurrencySerializer(serializers.ModelSerializer):

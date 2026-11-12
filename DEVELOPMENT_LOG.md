@@ -107,3 +107,42 @@ known limitations, phase by phase.
 - Income/expenditure is single-entry by category (church treasury practice), not a full double-entry general ledger. Inter-unit remittances are recorded as expenditure (*Remittance to higher office*) at the sender and income at the receiver.
 - Maintenance costs and sale proceeds are recorded under Finance separately (the asset screens remind the user); they are not posted automatically.
 - Offline replays of the same draft are refused as duplicates; full idempotent replay and conflict handling arrive with the Phase 5 sync engine.
+
+## Phase 4 — Ministries, programs, attendance & communication  ✅
+
+**Completed — ministries & departments (`apps/departments`)**
+
+- Departments per unit (youth, women, men, children, choir, evangelism, prayer, ushering, media, welfare, other) with leader, meeting schedule and active flag; names unique per unit.
+- Department membership with roles (member, leader, assistant, secretary, treasurer); leaving keeps the history and a member can rejoin later. Only members of the department's unit (or its congregations) can join.
+- **Department-restricted leaders**: a role assignment can be limited to one department. Such a leader sees and manages only that department's record, programs and attendance; pastors and overseers see every department in their jurisdiction.
+
+**Completed — programs & events (`apps/programs`)**
+
+- Calendar (month view) and list of services, crusades, conferences, revivals, outreach and fellowship meetings with category, organising unit, optional department, venue, coordinator, speakers, expected attendance and budget.
+- **Approval** at the unit above the organiser; the planner cannot approve their own program; returning requires a reason. Programs can be postponed (reason), cancelled (reason; then read-only), reinstated, and marked completed only after they start.
+- **Outcome report**: summary, decisions for Christ, baptisms and follow-up plan; attendance per day of the program.
+- Programs marked *open to every unit* (e.g. a national convention) are visible everywhere but editable only by the organising unit.
+- Export to PDF/Excel/CSV; dashboard section (upcoming programs, programs held, decisions and baptisms this year) and attention items (programs awaiting your approval; past programs without an outcome report).
+
+**Completed — attendance (`apps/attendance`)**
+
+- Head counts (men, women, boys, girls, visitors, first-time guests, new converts) per service type, program day or department meeting; one record per gathering per day (checked in the serializer and by a database constraint); no future dates; visitors cannot exceed the total.
+- Optional **member register** (setting *allow individual attendance*): members marked present are counted by gender and age (under 13 counts as a child) and visitors are added on top; members from other units are refused.
+- Analysis: average Sunday attendance, weekly Sunday trend, composition, average by service type, branch comparison with attendance as a share of active members; export; dashboard section.
+- **Offline**: head counts are saved on the device with a client UUID and upload later; the member register needs a connection.
+
+**Completed — notifications & announcements (`apps/notifications`)**
+
+- In-app notifications generated from domain events after the transaction commits: approvers are notified when finance entries, budgets, asset transfers/disposals and programs await them; recorders are notified of decisions. The actor is never notified of their own action. Header bell with unread count, notifications page, mark read / mark all read.
+- Announcements addressed to a unit and every unit below it, with priority, scheduled publishing, expiry and pinning. Important and urgent announcements also notify everyone in the audience. Overseers also see what their branches were told. Latest announcements appear on the dashboard.
+
+**Hardening**
+
+- Database integrity errors (e.g. two devices recording the same service at the same moment) now return *409 Conflict* with a plain message instead of a server error.
+
+**Tests:** 119 backend tests (adds program approval at the parent unit, creator segregation, status rules, public programs, department-restricted visibility, attendance uniqueness and validation, register-derived counts, offline client IDs, attendance stats by jurisdiction, notification targeting and privacy, announcement audience and permissions, urgent-announcement notifications, department membership rules). Browser check of the calendar, program detail, attendance entry and analysis, departments, announcements, notifications and dashboard.
+
+**Known limitations / outstanding**
+
+- Notifications are in-app only. E-mail/SMS delivery can subscribe to the same domain events later (SMTP is already configurable).
+- Recurring programs (e.g. every Sunday) are not generated automatically; regular services are captured through attendance records by service type.

@@ -23,6 +23,13 @@ const PoliciesPage = lazy(() => import('@/modules/finance/PoliciesPage'));
 const AssetsPage = lazy(() => import('@/modules/assets/AssetsPage'));
 const AssetDetailPage = lazy(() => import('@/modules/assets/AssetDetailPage'));
 const AssetApprovalsPage = lazy(() => import('@/modules/assets/AssetApprovalsPage'));
+const ProgramsPage = lazy(() => import('@/modules/programs/ProgramsPage'));
+const ProgramDetailPage = lazy(() => import('@/modules/programs/ProgramDetailPage'));
+const AttendancePage = lazy(() => import('@/modules/attendance/AttendancePage'));
+const DepartmentsPage = lazy(() => import('@/modules/departments/DepartmentsPage'));
+const DepartmentDetailPage = lazy(() => import('@/modules/departments/DepartmentDetailPage'));
+const NotificationsPage = lazy(() => import('@/modules/notifications/NotificationsPage'));
+const AnnouncementsPage = lazy(() => import('@/modules/notifications/AnnouncementsPage'));
 const UsersPage = lazy(() => import('@/modules/admin/UsersPage'));
 const RolesPage = lazy(() => import('@/modules/admin/RolesPage'));
 const SettingsPage = lazy(() => import('@/modules/admin/SettingsPage'));
@@ -64,6 +71,13 @@ export const router = createBrowserRouter([
       { path: 'assets', element: guarded('assets.view', <AssetsPage />) },
       { path: 'assets/approvals', element: guarded('assets.approve', <AssetApprovalsPage />) },
       { path: 'assets/:id', element: guarded('assets.view', <AssetDetailPage />) },
+      { path: 'programs', element: guarded('programs.view', <ProgramsPage />) },
+      { path: 'programs/:id', element: guarded('programs.view', <ProgramDetailPage />) },
+      { path: 'attendance', element: guarded('attendance.view', <AttendancePage />) },
+      { path: 'departments', element: guarded('departments.view', <DepartmentsPage />) },
+      { path: 'departments/:id', element: guarded('departments.view', <DepartmentDetailPage />) },
+      { path: 'notifications', element: s(<NotificationsPage />) },
+      { path: 'announcements', element: s(<AnnouncementsPage />) },
       { path: 'admin/users', element: guarded('users.view', <UsersPage />) },
       { path: 'admin/roles', element: guarded('roles.edit', <RolesPage />) },
       { path: 'admin/settings', element: guarded('settings.edit', <SettingsPage />) },

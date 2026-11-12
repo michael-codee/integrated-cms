@@ -50,3 +50,19 @@ def notify(sender, event_type, org_unit, actor, title, body, link, notify_perm, 
         ])
     except Exception:  # notifications must never break the business transaction that raised them
         logger.exception("Could not create notifications for %s", event_type)
+
+
+def _register_dashboard_section():
+    from apps.dashboard import sections
+
+    @sections.section("announcements", "dashboard.view")
+    def announcements_section(user, ctx):
+        from .views import visible_announcements
+
+        qs = visible_announcements(user).select_related("org_unit").order_by("-is_pinned", "-publish_at")[:5]
+        return {"items": [{"id": str(a.id), "title": a.title, "body": a.body[:400], "priority": a.priority,
+                           "org_unit_name": a.org_unit.name, "publish_at": a.publish_at, "is_pinned": a.is_pinned}
+                          for a in qs]}
+
+
+_register_dashboard_section()

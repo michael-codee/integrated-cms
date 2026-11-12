@@ -7,7 +7,7 @@ import { Button, EmptyState, PageHeader, PageLoader } from '@/components/ui';
 import { getMeta, setMeta } from '@/offline/db';
 import { dateTime } from '@/lib/format';
 import { DashboardFilters } from './DashboardFilters';
-import { AttentionSection, DASHBOARD_SECTIONS } from './sections';
+import { AnnouncementsSection, AttentionSection, DASHBOARD_SECTIONS } from './sections';
 import type { DashboardData, DashboardFilters as F } from './types';
 
 const EMPTY: F = { region: '', district: '', branch: '', from: '', to: '', financial_year: '', department: '' };
@@ -57,7 +57,7 @@ export default function DashboardPage() {
               {data._cached && <p className="rounded-lg bg-gold-50 px-4 py-2 text-xs text-gold-900 dark:bg-gold-900/30 dark:text-gold-100">Offline: showing figures from {dateTime(data.generated_at)}.</p>}
               <div className="grid gap-6 lg:grid-cols-3">
                 <div className="space-y-6 lg:col-span-2">{DASHBOARD_SECTIONS.slice(0, 1).map((s) => <s.component key={s.key} data={data} />)}</div>
-                <AttentionSection data={data} />
+                <div className="space-y-6"><AttentionSection data={data} /><AnnouncementsSection data={data} /></div>
               </div>
               {DASHBOARD_SECTIONS.slice(1).map((s) => <s.component key={s.key} data={data} />)}
               <p className="text-right text-xs text-slate-400">Figures computed from live records at {dateTime(data.generated_at)}.</p>

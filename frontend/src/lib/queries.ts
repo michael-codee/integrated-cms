@@ -28,7 +28,7 @@ export function useBranches() {
 export function usePublicSettings() {
   return useQuery({
     queryKey: ['settings', 'public'],
-    queryFn: () => api<{ ministry_name: string; alternate_name: string; default_currency: string; logo: string | null }>('/settings/public/'),
+    queryFn: () => api<{ ministry_name: string; alternate_name: string; default_currency: string; logo: string | null; allow_individual_attendance?: boolean }>('/settings/public/'),
     staleTime: 30 * 60 * 1000,
   });
 }

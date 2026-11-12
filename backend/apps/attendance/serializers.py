@@ -38,7 +38,8 @@ class AttendanceSerializer(ClientIdMixin, serializers.ModelSerializer):
     def get_present_member_ids(self, obj):
         if not obj.is_individual or self.context.get("view") and self.context["view"].action == "list":
             return None
-        return [str(e.member_id) for e in obj.entries.all()]
+        return [{"id": str(e.member_id), "full_name": e.member.full_name, "membership_no": e.member.membership_no or "",
+                 "gender": e.member.gender} for e in obj.entries.select_related("member")]
 
     def validate(self, attrs):
         if self.instance is not None:

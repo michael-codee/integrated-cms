@@ -87,7 +87,20 @@ class ApprovalEntrySerializer(serializers.ModelSerializer):
         fields = ["id", "step", "step_label", "decision", "comment", "by", "created_at"]
 
 
-class TransactionSerializer(serializers.ModelSerializer):
+class ClientIdMixin(serializers.Serializer):
+    """Offline-created records carry a client-generated UUID so the queued copy
+    and the server copy are the same record after sync."""
+
+    id = serializers.UUIDField(required=False)
+
+    def validate_id(self, value):
+        model = self.Meta.model
+        if self.instance is None and model.all_objects.filter(pk=value).exists():
+            raise serializers.ValidationError("A record with this identifier already exists.")
+        return value
+
+
+class TransactionSerializer(ClientIdMixin, serializers.ModelSerializer):
     org_unit_name = serializers.CharField(source="org_unit.name", read_only=True)
     account_name = serializers.CharField(source="account.name", read_only=True)
     category_name = serializers.CharField(source="category.name", read_only=True)
@@ -111,7 +124,7 @@ class TransactionSerializer(serializers.ModelSerializer):
                   "external_ref", "attachment", "status", "required_steps", "current_step", "next_step",
                   "submitted_at", "submitted_by_name", "approved_at", "created_by_name", "created_at",
                   "reversal_of", "reversal_of_reference", "reversed_by", "approvals", "can_approve", "version",
-                  "sync_state", "is_demo"]
+                  "sync_state", "is_demo", "client_created_at"]
         read_only_fields = ["reference", "financial_year", "status", "required_steps", "current_step", "submitted_at",
                             "approved_at", "created_at", "reversal_of", "version", "is_demo"]
         extra_kwargs = {"currency": {"required": False}, "org_unit": {"required": False}}
@@ -137,6 +150,8 @@ class TransactionSerializer(serializers.ModelSerializer):
         return "synced"
 
     def validate(self, attrs):
+        if self.instance is not None:
+            attrs.pop("id", None)
         if self.instance is not None and self.instance.status != Transaction.Status.DRAFT:
             raise serializers.ValidationError("Only drafts can be edited. Approved entries are corrected by reversal.")
         account = attrs.get("account") or getattr(self.instance, "account", None)

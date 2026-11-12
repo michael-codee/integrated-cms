@@ -21,6 +21,7 @@ from django.core.validators import MinValueValidator
 from django.db import connection, models
 from django.utils import timezone
 
+from apps.core.uploads import RandomName, document_validator, image_validator
 from apps.core.models import BaseModel, SoftDeleteModel, SyncModel
 
 FINANCE_REF_SEQUENCE = "cmis_finance_ref_seq"
@@ -161,7 +162,8 @@ class Transaction(SyncModel):
     description = models.TextField(blank=True, default="")
     external_ref = models.CharField(max_length=80, blank=True, default="",
                                     help_text="Cheque no., bank or mobile-money reference, invoice no.")
-    attachment = models.FileField(upload_to="finance/supporting/%Y/%m/", null=True, blank=True)
+    attachment = models.FileField(upload_to=RandomName("finance/supporting"), null=True, blank=True,
+                                  validators=[document_validator])
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT, db_index=True)
     policy = models.ForeignKey(ApprovalPolicy, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
     required_steps = models.JSONField(default=list, blank=True,

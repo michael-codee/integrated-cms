@@ -45,3 +45,10 @@ export function today() {
 export function titleCase(s?: string | null) {
   return (s || '').replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
+
+/** Short money for tiles, e.g. "SLE 925.2K"; full value belongs in a tooltip or table. */
+export function moneyShort(value: number | string | null | undefined, currency = 'SLE') {
+  const n = Number(value ?? 0);
+  if (Math.abs(n) < 100000) return money(n, currency).replace(/\.00$/, '');
+  return `${currency} ${new Intl.NumberFormat('en-GB', { notation: 'compact', maximumFractionDigits: 1 }).format(n)}`;
+}

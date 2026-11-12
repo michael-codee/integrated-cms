@@ -43,7 +43,7 @@ def assets_attention(user, ctx):
         overdue = [m for m in asset_summary(user, ctx.unit)["maintenance_due"] if m["overdue"]]
         if overdue:
             items.append({"key": "maintenance_overdue", "label": "Assets with overdue maintenance",
-                          "count": len(overdue), "link": "/assets?maintenance=overdue", "severity": "warning"})
+                          "count": len(overdue), "link": "/assets?tab=analytics", "severity": "warning"})
     return items
 
 

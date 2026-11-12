@@ -225,3 +225,13 @@ def test_policy_admin_only(api, people):
     assert api(people["pastor_koidu"]).post("/api/finance/approval-policies/", body, format="json").status_code == 403
     assert api(people["admin"]).post("/api/finance/approval-policies/", body, format="json").status_code == 201
     assert len(api(people["pastor_koidu"]).get("/api/finance/approval-policies/").data) == 6
+
+
+def test_offline_client_id_is_kept(api, people, fin):
+    import uuid
+
+    cid = str(uuid.uuid4())
+    r = record(api, people["treasurer_koidu"], fin["cash"], fin["tithes"], "75", id=cid)
+    assert r.status_code == 201 and r.data["id"] == cid
+    r = record(api, people["treasurer_koidu"], fin["cash"], fin["tithes"], "75", id=cid)
+    assert r.status_code == 400  # replay with the same id is refused, not duplicated

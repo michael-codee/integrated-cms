@@ -12,6 +12,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import connection, models
 from django.utils import timezone
 
+from apps.core.uploads import RandomName, document_validator, image_validator
 from apps.core.models import BaseModel, SyncModel
 
 ASSET_NO_SEQUENCE = "cmis_asset_no_seq"
@@ -73,8 +74,10 @@ class Asset(SyncModel):
     warranty_expiry = models.DateField(null=True, blank=True)
     insurance_expiry = models.DateField(null=True, blank=True)
     insurance_details = models.CharField(max_length=200, blank=True, default="")
-    photo = models.ImageField(upload_to="assets/photos/", null=True, blank=True)
-    document = models.FileField(upload_to="assets/documents/", null=True, blank=True,
+    photo = models.ImageField(upload_to=RandomName("assets/photos"), null=True, blank=True,
+                              validators=[image_validator])
+    document = models.FileField(upload_to=RandomName("assets/documents"), null=True, blank=True,
+                                validators=[document_validator],
                                 help_text="Ownership / purchase document")
     disposed_on = models.DateField(null=True, blank=True)
     notes = models.TextField(blank=True, default="")

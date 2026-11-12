@@ -13,6 +13,16 @@ const StructurePage = lazy(() => import('@/modules/structure/StructurePage'));
 const MembersPage = lazy(() => import('@/modules/members/MembersPage'));
 const MemberDetailPage = lazy(() => import('@/modules/members/MemberDetailPage'));
 const TransfersPage = lazy(() => import('@/modules/members/TransfersPage'));
+const FinanceOverviewPage = lazy(() => import('@/modules/finance/FinanceOverviewPage'));
+const TransactionsPage = lazy(() => import('@/modules/finance/TransactionsPage'));
+const TransactionDetailPage = lazy(() => import('@/modules/finance/TransactionDetailPage'));
+const FinanceApprovalsPage = lazy(() => import('@/modules/finance/ApprovalsPage'));
+const BudgetsPage = lazy(() => import('@/modules/finance/BudgetsPage'));
+const AccountsPage = lazy(() => import('@/modules/finance/AccountsPage'));
+const PoliciesPage = lazy(() => import('@/modules/finance/PoliciesPage'));
+const AssetsPage = lazy(() => import('@/modules/assets/AssetsPage'));
+const AssetDetailPage = lazy(() => import('@/modules/assets/AssetDetailPage'));
+const AssetApprovalsPage = lazy(() => import('@/modules/assets/AssetApprovalsPage'));
 const UsersPage = lazy(() => import('@/modules/admin/UsersPage'));
 const RolesPage = lazy(() => import('@/modules/admin/RolesPage'));
 const SettingsPage = lazy(() => import('@/modules/admin/SettingsPage'));
@@ -44,6 +54,16 @@ export const router = createBrowserRouter([
       { path: 'members', element: guarded('members.view', <MembersPage />) },
       { path: 'members/transfers', element: guarded('members.view', <TransfersPage />) },
       { path: 'members/:id', element: guarded('members.view', <MemberDetailPage />) },
+      { path: 'finance', element: guarded('finance.view', <FinanceOverviewPage />) },
+      { path: 'finance/transactions', element: guarded('finance.view', <TransactionsPage />) },
+      { path: 'finance/transactions/:id', element: guarded('finance.view', <TransactionDetailPage />) },
+      { path: 'finance/approvals', element: guarded(['finance.approve', 'budgets.approve'], <FinanceApprovalsPage />) },
+      { path: 'finance/budgets', element: guarded('budgets.view', <BudgetsPage />) },
+      { path: 'finance/accounts', element: guarded('finance.view', <AccountsPage />) },
+      { path: 'finance/rules', element: guarded('finance.view', <PoliciesPage />) },
+      { path: 'assets', element: guarded('assets.view', <AssetsPage />) },
+      { path: 'assets/approvals', element: guarded('assets.approve', <AssetApprovalsPage />) },
+      { path: 'assets/:id', element: guarded('assets.view', <AssetDetailPage />) },
       { path: 'admin/users', element: guarded('users.view', <UsersPage />) },
       { path: 'admin/roles', element: guarded('roles.edit', <RolesPage />) },
       { path: 'admin/settings', element: guarded('settings.edit', <SettingsPage />) },

@@ -132,7 +132,8 @@ def generate_demo(rng, members):
                 for code, scale in (("sunday-offering", 9), ("tithes", 22), ("thanksgiving-offering", 3)):
                     amt = Decimal(int(size * scale * rng.uniform(0.6, 1.4)))
                     member = rng.choice(by_branch[branch.id]) if code == "tithes" and by_branch.get(branch.id) else None
-                    rows.append(Transaction(kind="income", org_unit=branch, account=cash, category=income[code],
+                    rows.append(Transaction(kind="income", org_unit=branch, account=bank if code == "tithes" else cash,
+                                            category=income[code],
                                             amount=amt, currency_id="SLE", transaction_date=day, method="cash",
                                             party="Congregation" if member is None else "",
                                             member=member if code == "tithes" and rng.random() < 0.3 else None,
@@ -168,9 +169,13 @@ def generate_demo(rng, members):
     for t in rows[-6:]:
         t.status, t.approved_at = "submitted", None
     Transaction.objects.bulk_create(rows, batch_size=1000)
-    TransactionApproval.objects.bulk_create([
-        TransactionApproval(transaction=t, step=0, step_label="Pastor-in-Charge", decision="approved",
-                            comment="[DEMO]") for t in rows if t.status == "approved"], batch_size=1000)
+    log = []
+    for t in rows:
+        log.append(TransactionApproval(transaction=t, step=0, decision="submitted", comment="[DEMO]"))
+        if t.status == "approved":
+            log.append(TransactionApproval(transaction=t, step=0, step_label="Pastor-in-Charge", decision="approved",
+                                           comment="[DEMO]"))
+    TransactionApproval.objects.bulk_create(log, batch_size=1000)
     return len(rows)
 
 
@@ -183,6 +188,7 @@ demo_hooks.PURGE_SQL.extend([
     "DELETE FROM finance_transaction WHERE is_demo",
     "DELETE FROM finance_account a WHERE a.notes = '[DEMO] fictional account' AND NOT EXISTS "
     "(SELECT 1 FROM finance_transaction t WHERE t.account_id = a.id)",
+    "SET CONSTRAINTS ALL IMMEDIATE",
     "ALTER TABLE finance_transaction ENABLE TRIGGER finance_transaction_guard",
     "ALTER TABLE finance_transactionapproval ENABLE TRIGGER finance_approval_append_only",
 ])

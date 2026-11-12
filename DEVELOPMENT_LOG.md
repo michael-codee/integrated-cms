@@ -64,3 +64,46 @@ known limitations, phase by phase.
 
 - Offline edits are queued but the full conflict-resolution engine (server idempotency keys, version conflicts, Sync Centre) lands in Phase 5; until then queued changes replay in order when the device reconnects.
 - Map tiles need internet access; branches without coordinates are listed under the map rather than plotted.
+
+---
+
+## Phase 3 — Finance & assets  ✅
+
+**Completed — finance (`apps/finance`)**
+
+- **Accounts** per unit (cash box, bank, mobile money) with currency, opening balance and live balance from approved entries; accounts with history cannot change unit, currency or opening figures, only be closed.
+- **Income and expenditure** entries with category, account, member (optional, jurisdiction-checked), method, external reference, supporting document, program/project. Server-issued references (`INC-/EXP-/REV-YYYY-nnnnnn`). Future dates, wrong-kind categories, other units' accounts, currency mismatches and closed financial years are refused.
+- **Configurable approval workflow** (`ApprovalPolicy` + steps): thresholds by amount, entry type and unit type; each step names the hierarchy level that approves (own unit, district, region, headquarters). Initial rules (editable in *Finance → Approval rules*): income — 1 step; expenditure < SLE 5,000 — Pastor-in-Charge; 5,000–25,000 — + District; ≥ 25,000 — + Headquarters; reversals — Pastor + District. Steps are snapshotted at submission.
+- **Segregation of duties**: the recorder and the submitter can never approve; nobody approves two steps of the same entry. Approvers can approve, return for correction or reject (reason required). Approvers see only entries whose *current* step they may act on.
+- **Immutability**: submitted/approved figures are locked in the service layer *and* by PostgreSQL triggers (no UPDATE of figures, no DELETE of transactions; approval log and reconciliations append-only). Corrections are made with an approved **reversing entry**; the original keeps counting in its period and the reversal counts negative in its own, so closed periods never change.
+- **Official receipts** (PDF with logo, approver, reversed watermark) for approved income; printing is audited.
+- **Budgets** per unit and financial year with income/expenditure lines; approved by the level above (branch → district → region → HQ), never by the preparer; returned budgets can be revised and resubmitted; **budget vs actual** with over-budget highlighting.
+- **Reconciliation** of statement/cash count against book balance at a date, with history.
+- **Statement of income and expenditure**: totals, by month, by category, by sub-unit, pending approvals, account balances; filters by unit, financial year or dates; export to PDF/Excel/CSV.
+- Dashboard finance section and "requires your attention" items (entries and budgets awaiting approval, entries returned to the recorder).
+- **Offline**: entries can be recorded offline as drafts with a client UUID; they upload as drafts and are submitted for approval online. Approval actions are online-only by design.
+
+**Completed — assets (`apps/assets`)**
+
+- **Asset register** with category, unit, location, custodian, condition, status, acquisition details, cost, funding source, supplier, serial/registration/title-deed numbers, warranty and insurance dates, photo and ownership document; server-issued asset numbers.
+- **Straight-line depreciation** (category default or per-asset rate), book value and year-by-year schedule; land is not depreciated.
+- **Maintenance and inspections** with cost, provider, condition after, next due date; overdue items surface on the dashboard.
+- **Transfers** between units approved at the receiving unit (requester cannot approve); **disposal / write-off / loss** approved one level above the holding unit; disposed assets are read-only. Assets are never deleted.
+- Register export, analysis (value by category, condition, maintenance due) and dashboard section.
+
+**Security addition**
+
+- Central upload validation (`apps/core/uploads.py`) on every file field: extension allow-list, size limits, content-signature check (renamed executables/HTML refused, SVG never accepted) and random server-side file names.
+
+**Tests:** 104 backend tests (adds 14 finance, 7 assets, 9 upload-safety tests: multi-level approvals, segregation, HQ step, DB-level immutability, reversal netting, return-and-resubmit, validation rules, jurisdiction isolation, budget workflow and performance, reconciliation, policy permissions, offline client IDs, asset transfer/disposal approvals, depreciation, maintenance rules). Browser check of every Phase 3 screen and the dashboard.
+
+**Decisions**
+
+- Approval routing by *hierarchy level* rather than by named role, so it keeps working when people change post: whoever holds `finance.approve` at that level approves.
+- Reversal instead of edit/delete for approved money, enforced in the database.
+
+**Known limitations / outstanding**
+
+- Income/expenditure is single-entry by category (church treasury practice), not a full double-entry general ledger. Inter-unit remittances are recorded as expenditure (*Remittance to higher office*) at the sender and income at the receiver.
+- Maintenance costs and sale proceeds are recorded under Finance separately (the asset screens remind the user); they are not posted automatically.
+- Offline replays of the same draft are refused as duplicates; full idempotent replay and conflict handling arrive with the Phase 5 sync engine.

@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from django.db import connection, models
 from django.utils import timezone
 
+from apps.core.uploads import RandomName, document_validator, image_validator
 from apps.core.models import BaseModel, SyncModel
 
 MEMBER_NO_SEQUENCE = "cmis_member_no_seq"
@@ -63,7 +64,8 @@ class Member(SyncModel):
     occupation = models.CharField(max_length=120, blank=True, default="")
     emergency_contact_name = models.CharField(max_length=160, blank=True, default="")
     emergency_contact_phone = models.CharField(max_length=40, blank=True, default="")
-    photo = models.ImageField(upload_to="members/photos/", null=True, blank=True)
+    photo = models.ImageField(upload_to=RandomName("members/photos"), null=True, blank=True,
+                              validators=[image_validator])
     photo_consent = models.BooleanField(default=False)
     exit_date = models.DateField(null=True, blank=True)
     exit_reason = models.TextField(blank=True, default="")

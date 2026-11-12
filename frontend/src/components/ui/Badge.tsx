@@ -26,7 +26,7 @@ const STATUS_TONES: Record<string, Tone> = {
   pending: 'yellow', planned: 'blue', draft: 'gray', under_review: 'purple', ongoing: 'purple', returned: 'orange', fair: 'yellow',
   inactive: 'gray', suspended: 'orange', deactivated: 'red', rejected: 'red', cancelled: 'gray', failed: 'red', conflict: 'red',
   deceased: 'gray', transferred: 'purple', withdrawn: 'gray', poor: 'orange', damaged: 'red', lost: 'red', disposed: 'gray',
-  under_maintenance: 'orange', overdue: 'red', local: 'yellow', open: 'yellow', resolved: 'green', reversed: 'gray',
+  under_maintenance: 'orange', maintenance: 'orange', idle: 'gray', unserviceable: 'red', overdue: 'red', local: 'yellow', open: 'yellow', resolved: 'green', reversed: 'gray',
 };
 
 export function StatusBadge({ status, label }: { status?: string | null; label?: string }) {

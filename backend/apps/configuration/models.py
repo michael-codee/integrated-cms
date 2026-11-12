@@ -5,6 +5,7 @@ import datetime
 from django.core.exceptions import ValidationError
 from django.db import models
 
+from apps.core.uploads import RandomName, document_validator, image_validator
 from apps.core.models import BaseModel, SyncModel
 
 
@@ -19,7 +20,7 @@ class SystemSetting(BaseModel):
         max_length=300, blank=True,
         default='"Let all things be done decently and in order." — 1 Corinthians 14:40 (KJV)',
     )
-    logo = models.ImageField(upload_to="branding/", null=True, blank=True)
+    logo = models.ImageField(upload_to=RandomName("branding"), null=True, blank=True, validators=[image_validator])
     hq_address = models.TextField(default="Koidu City, Kono District, Eastern Province, Sierra Leone")
     phone = models.CharField(max_length=60, blank=True, default="")
     email = models.EmailField(blank=True, default="")

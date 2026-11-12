@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from apps.finance.serializers import ClientIdMixin
 from apps.organization.models import OrgUnit
 
 from . import services
@@ -21,7 +22,7 @@ class AssetListSerializer(serializers.ModelSerializer):
         return obj.book_value()
 
 
-class AssetSerializer(AssetListSerializer):
+class AssetSerializer(ClientIdMixin, AssetListSerializer):
     effective_rate = serializers.DecimalField(max_digits=5, decimal_places=2, read_only=True)
     pending_movement = serializers.SerializerMethodField()
     pending_disposal = serializers.SerializerMethodField()
@@ -32,7 +33,7 @@ class AssetSerializer(AssetListSerializer):
             "description", "serial_number", "registration_no", "title_document_no", "size_description",
             "acquisition_method", "funding_source", "supplier", "depreciation_rate", "effective_rate",
             "warranty_expiry", "insurance_expiry", "insurance_details", "photo", "document", "disposed_on", "notes",
-            "pending_movement", "pending_disposal", "last_maintenance", "created_at", "updated_at"]
+            "pending_movement", "pending_disposal", "last_maintenance", "created_at", "updated_at", "client_created_at"]
         read_only_fields = ["asset_no", "disposed_on", "created_at", "updated_at", "version", "is_demo"]
         extra_kwargs = {"status": {"required": False}}
 
@@ -63,6 +64,7 @@ class AssetSerializer(AssetListSerializer):
 
     def validate(self, attrs):
         if self.instance is not None:
+            attrs.pop("id", None)
             services.ensure_open(self.instance)
             if "org_unit" in attrs and attrs["org_unit"] != self.instance.org_unit:
                 raise serializers.ValidationError({"org_unit": "Use a transfer to move an asset to another unit."})

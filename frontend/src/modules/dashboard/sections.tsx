@@ -10,8 +10,12 @@ import { Card, CardBody, CardHeader, PageLoader, StatCard } from '@/components/u
 import { BarsChart, ChartCard, DonutChart, TrendChart, monthLabel } from '@/components/charts';
 import { num } from '@/lib/format';
 import type { DashboardData } from './types';
+import type { FinanceSummary } from '@/modules/finance/types';
+import type { AssetSummary } from '@/modules/assets/types';
 
 const BranchMap = lazy(() => import('@/components/BranchMap'));
+const FinanceFigures = lazy(() => import('@/modules/finance/FinanceOverviewPage').then((m) => ({ default: m.FinanceFigures })));
+const AssetFigures = lazy(() => import('@/modules/assets/AssetsPage').then((m) => ({ default: m.AssetFigures })));
 
 export type SectionComponent = (props: { data: DashboardData }) => ReactNode;
 
@@ -108,10 +112,34 @@ function MapSection({ data }: { data: DashboardData }) {
   );
 }
 
+function FinanceSection({ data }: { data: DashboardData }) {
+  const f = data.finance as FinanceSummary | undefined;
+  if (!f) return null;
+  return (
+    <section className="space-y-4">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Finance {f.financial_year ? `· ${f.financial_year}` : ''}</h2>
+      <Suspense fallback={<PageLoader />}><FinanceFigures data={f} /></Suspense>
+    </section>
+  );
+}
+
+function AssetsSection({ data }: { data: DashboardData }) {
+  const a = data.assets as AssetSummary | undefined;
+  if (!a) return null;
+  return (
+    <section className="space-y-4">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Assets &amp; property</h2>
+      <Suspense fallback={<PageLoader />}><AssetFigures s={a} /></Suspense>
+    </section>
+  );
+}
+
 /** Ordered list of sections; later phases insert theirs. */
 export const DASHBOARD_SECTIONS: { key: string; component: SectionComponent }[] = [
   { key: 'structure', component: StructureKpis },
   { key: 'membership', component: MembershipSection },
+  { key: 'finance', component: FinanceSection },
+  { key: 'assets', component: AssetsSection },
   { key: 'map', component: MapSection },
 ];
 

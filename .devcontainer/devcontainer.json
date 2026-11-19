@@ -1,0 +1,19 @@
+{
+  // One-click TEST environment in GitHub Codespaces: Code -> Codespaces -> Create codespace.
+  // Runs the same Docker stack as production, with demo data and a test login.
+  // Never put real church records in a codespace.
+  "name": "RLWM CMIS (test)",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "hostRequirements": { "cpus": 2, "memory": "8gb" },
+  "forwardPorts": [80],
+  "portsAttributes": {
+    "80": { "label": "Church management system", "onAutoForward": "openBrowser" }
+  },
+  "postStartCommand": "bash .devcontainer/start.sh",
+  "customizations": {
+    "codespaces": { "openFiles": [".devcontainer/README.md"] }
+  }
+}

@@ -34,6 +34,8 @@ jobs:
         env:
           DJANGO_SETTINGS_MODULE: config.settings.test
       - run: python -m pytest --create-db -q
+      - name: Vercel's requirements.txt matches backend/requirements.txt
+        run: diff <(grep -v '^#' ../requirements.txt) <(grep -v '^gunicorn' requirements.txt)
 
   frontend:
     runs-on: ubuntu-latest

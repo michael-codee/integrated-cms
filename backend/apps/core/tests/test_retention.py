@@ -24,3 +24,13 @@ def test_purge_expired_keeps_recent_and_audit(people):
     assert list(IdempotencyRecord.objects.values_list("key", flat=True)) == ["new"]
     assert list(Notification.objects.values_list("title", flat=True)) == ["old unread"]
     assert AuditLog.objects.count() == audits
+
+
+@pytest.mark.django_db
+def test_cron_endpoint_needs_secret(settings, client):
+    settings.CRON_SECRET = ""
+    assert client.get("/api/cron/housekeeping/").status_code == 404
+    settings.CRON_SECRET = "s3cret-value"
+    assert client.get("/api/cron/housekeeping/", HTTP_AUTHORIZATION="Bearer wrong").status_code == 404
+    r = client.get("/api/cron/housekeeping/", HTTP_AUTHORIZATION="Bearer s3cret-value")
+    assert r.status_code == 200 and r.json()["status"] == "ok"

@@ -14,6 +14,9 @@ PDF = b"%PDF-1.4\n%fake test pdf\n"
 def private_root(settings, tmp_path):
     settings.PRIVATE_MEDIA_ROOT = tmp_path / "private"
     settings.MEDIA_ROOT = tmp_path / "media"
+    settings.STORAGES = {**settings.STORAGES, "private": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+        "OPTIONS": {"location": str(tmp_path / "private"), "base_url": None}}}
     from django.utils.functional import empty
 
     from apps.documents.models import private_storage

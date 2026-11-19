@@ -14,7 +14,7 @@ On a production server both are shown only to staff signed in at `/django-admin/
 - Lists are paginated: `?page=2&page_size=50` (max 200) → `{"count", "next", "previous", "results"}`. Most lists accept `search=`, `ordering=` and field filters (see the schema).
 - Every list and every write is limited to the caller's **jurisdiction** (the units where they hold a role, and the units below). Records outside it return 404, not 403, so their existence is not revealed.
 - Errors: `{"detail": "...", "code": "..."}` or, for validation, `{"field": ["message", ...]}` with status 400. 401 = not signed in / token expired; 403 = no permission; 404 = not found or outside jurisdiction; 409 = conflict (duplicate, version conflict, record in use); 429 = rate limited.
-- Exports: list endpoints that support it take `?file_format=xlsx|csv|pdf` (rate limited, audited).
+- Exports: list endpoints that support it have `…/export/?file_format=xlsx|csv|pdf` (rate limited, audited).
 - Uploaded files are returned as short-lived signed links (`/api/files/<token>/`). Do not store these links; fetch the record again for a fresh one.
 
 ## Authentication

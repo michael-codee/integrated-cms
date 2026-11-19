@@ -65,7 +65,13 @@ def _ministry():
     if s.logo:
         try:
             logo = s.logo.path
-        except (NotImplementedError, ValueError):
+        except NotImplementedError:  # object storage (e.g. Supabase): read the bytes instead of a path
+            try:
+                with s.logo.open("rb") as fh:
+                    logo = io.BytesIO(fh.read())
+            except Exception:  # pragma: no cover - storage outage: fall back to the bundled logo
+                logo = None
+        except ValueError:
             logo = None
     return s, logo or (str(LOGO_PATH) if LOGO_PATH.exists() else None)
 

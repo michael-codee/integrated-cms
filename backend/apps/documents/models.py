@@ -7,8 +7,7 @@ available, so a record's history can always be shown.
 """
 import hashlib
 
-from django.conf import settings
-from django.core.files.storage import FileSystemStorage
+from django.core.files.storage import storages
 from django.db import models
 from django.utils.functional import LazyObject
 
@@ -17,8 +16,10 @@ from apps.core.uploads import RandomName, document_validator
 
 
 class PrivateStorage(LazyObject):
+    """The "private" storage: a folder outside the web root, or a private object-storage bucket."""
+
     def _setup(self):
-        self._wrapped = FileSystemStorage(location=settings.PRIVATE_MEDIA_ROOT, base_url=None)
+        self._wrapped = storages["private"]
 
 
 private_storage = PrivateStorage()

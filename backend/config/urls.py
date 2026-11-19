@@ -4,6 +4,7 @@ from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from apps.accounts.urls import auth_urls
+from apps.core import cron
 from apps.core.files import serve_signed_file
 
 
@@ -18,6 +19,7 @@ def health(request):
 api = [
     path("health/", health, name="health"),
     path("files/<str:token>/", serve_signed_file, name="signed-file"),
+    path("cron/housekeeping/", cron.housekeeping, name="cron-housekeeping"),
     path("auth/", include(auth_urls)),
     path("", include("apps.accounts.urls")),
     path("", include("apps.organization.urls")),

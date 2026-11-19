@@ -207,3 +207,22 @@ known limitations, phase by phase.
 - The member attendance register, uploads and all approvals need a connection.
 - Backups are written on the same server; copying them off-site is a manual step described in the backup guide.
 - The Docker stack was verified on a single test machine with plain HTTP; HTTPS certificate issuance depends on the real domain and DNS at installation.
+
+---
+
+## Deployment option — Vercel + Supabase  ✅
+
+**Completed**
+
+- Settings: `DATABASE_URL` (Supabase connection string, SSL required); `DB_POOLER=transaction` for Supabase's transaction pooler (no persistent connections, server-side cursors or prepared statements); `FILE_STORAGE=s3` keeps uploads and Documents & records in two private S3-compatible buckets (Supabase Storage) through `django-storages`; database-backed cache so rate limits hold across serverless instances; admin static files served without a collect step.
+- Export logos are read from object storage when the logo is not on local disk.
+- `api/index.py` (Django as one Vercel Python function) and `vercel.json`: app build, `/api`, `/django-admin` and `/static` rewrites, the same security headers as the Caddy server, London region, daily Vercel Cron to `/api/cron/housekeeping/` (protected by `CRON_SECRET`; 404 without it).
+- `manage.py secure_supabase`: revokes the Supabase Data API roles (`anon`, `authenticated`) from every table, sequence and function and enables Row Level Security on every table, so the church data is reachable only through the Django API.
+- GitHub Actions workflow *Supabase database* (run by hand): migrate + seed + lock-down, and creating the first administrator from a temporary secret.
+- Guide: `docs/DEPLOY_VERCEL_SUPABASE.md`.
+
+**Verified locally:** `vercel build` (CLI 50.4.0) completes and produces the expected routes, function and cron; the API run through the Vercel entry point, a PgBouncer transaction pooler and an S3-compatible store (moto) passed a smoke test: sign-in, member photo to bucket and back through a signed link, idempotent replay, document upload and download from the private bucket, logo from the bucket in PDF and Excel exports, sync pull, cron with and without the secret, admin static files, API docs hidden; both with the original request path and with the rewritten one. The offline end-to-end browser test passed against that setup. 141 backend tests.
+
+**Not verified here:** a real Vercel deployment and a real Supabase project (no access from this environment). The first real deploy is the remaining check.
+
+**Known limitations:** uploads limited to 4 MB by Vercel; Supabase daily backups cover the database only, so buckets must be copied separately; cold start of a few seconds after idle periods.

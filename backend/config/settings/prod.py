@@ -19,10 +19,12 @@ SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 X_FRAME_OPTIONS = "DENY"
 SECURE_REFERRER_POLICY = "same-origin"
-STORAGES = {
-    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
-}
+# Static files (Django admin only) are collected at image build; Vercel has no collect step, so it
+# keeps the plain backend (STATIC_MANIFEST=false).
+if env("STATIC_MANIFEST", True, bool):
+    STORAGES = {**STORAGES, "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"}}  # noqa: F405
+else:
+    WHITENOISE_USE_FINDERS = True  # serve the admin's static files straight from the installed apps
 
 # API documentation (/api/docs/, /api/schema/) is only shown to staff signed in to /django-admin/
 # unless API_DOCS_PUBLIC=true. The schema reveals no data, but there is no reason to publish it.

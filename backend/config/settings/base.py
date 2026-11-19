@@ -94,8 +94,16 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-DATABASES = {
-    "default": {
+def _database():
+    """PostgreSQL from POSTGRES_* variables, or from DATABASE_URL (e.g. Supabase's connection string).
+
+    DB_POOLER=transaction is for Supabase's transaction pooler (port 6543), which serverless hosts such
+    as Vercel must use: no persistent connections, no server-side cursors, no prepared statements.
+    """
+    from urllib.parse import unquote, urlsplit
+
+    url = env("DATABASE_URL")
+    db = {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": env("POSTGRES_DB", "cmis"),
         "USER": env("POSTGRES_USER", "cmis"),
@@ -104,8 +112,23 @@ DATABASES = {
         "PORT": env("POSTGRES_PORT", "5432"),
         "CONN_MAX_AGE": env("POSTGRES_CONN_MAX_AGE", 60, int),
         "ATOMIC_REQUESTS": True,
+        "OPTIONS": {},
     }
-}
+    if url:
+        parts = urlsplit(url)
+        db.update(NAME=unquote(parts.path.lstrip("/")) or "postgres", USER=unquote(parts.username or ""),
+                  PASSWORD=unquote(parts.password or ""), HOST=parts.hostname or "", PORT=str(parts.port or 5432))
+    sslmode = env("DB_SSLMODE", "require" if url else None)
+    if sslmode:
+        db["OPTIONS"]["sslmode"] = sslmode
+    if env("DB_POOLER", "") == "transaction":
+        db["CONN_MAX_AGE"] = 0
+        db["DISABLE_SERVER_SIDE_CURSORS"] = True
+        db["OPTIONS"]["prepare_threshold"] = None
+    return db
+
+
+DATABASES = {"default": _database()}
 
 AUTH_USER_MODEL = "accounts.User"
 
@@ -135,6 +158,37 @@ MEDIA_ROOT = Path(env("MEDIA_ROOT", str(BASE_DIR / "media")))
 FILE_URL_MAX_AGE = env("FILE_URL_MAX_AGE", 3600, int)
 # Documents & records are stored here and only served through the API (never by the web server).
 PRIVATE_MEDIA_ROOT = Path(env("PRIVATE_MEDIA_ROOT", str(BASE_DIR / "private-media")))
+
+# File storage. "local" keeps uploads on disk (MEDIA_ROOT / PRIVATE_MEDIA_ROOT, the Docker setup).
+# "s3" keeps them in S3-compatible object storage such as Supabase Storage (required on Vercel, whose
+# functions have no permanent disk). Two private buckets: uploads, and Documents & records.
+FILE_STORAGE = env("FILE_STORAGE", "local")
+if FILE_STORAGE == "s3":
+    _s3 = {
+        "endpoint_url": env("S3_ENDPOINT_URL"),
+        "region_name": env("S3_REGION"),
+        "access_key": env("S3_ACCESS_KEY_ID"),
+        "secret_key": env("S3_SECRET_ACCESS_KEY"),
+        "addressing_style": "path",
+        "signature_version": "s3v4",
+        "default_acl": None,
+        "file_overwrite": False,
+        "querystring_auth": True,
+    }
+    STORAGES = {
+        "default": {"BACKEND": "storages.backends.s3.S3Storage",
+                    "OPTIONS": {**_s3, "bucket_name": env("S3_BUCKET_MEDIA", "cmis-media")}},
+        "private": {"BACKEND": "storages.backends.s3.S3Storage",
+                    "OPTIONS": {**_s3, "bucket_name": env("S3_BUCKET_PRIVATE", "cmis-documents")}},
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    }
+else:
+    STORAGES = {
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "private": {"BACKEND": "django.core.files.storage.FileSystemStorage",
+                    "OPTIONS": {"location": str(PRIVATE_MEDIA_ROOT), "base_url": None}},
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -220,7 +274,7 @@ DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "CMIS <no-reply@localhost>")
 # Uploads
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
-MAX_UPLOAD_MB = env("MAX_UPLOAD_MB", 10, int)
+MAX_UPLOAD_MB = env("MAX_UPLOAD_MB", 10, int)  # Vercel refuses request bodies over 4.5 MB: use 4 there
 ALLOWED_UPLOAD_EXTENSIONS = ["pdf", "png", "jpg", "jpeg", "webp", "doc", "docx", "xls", "xlsx", "csv", "txt"]
 
 # Retention (purge_expired). The audit trail and church records are never purged.
@@ -229,6 +283,14 @@ NOTIFICATION_KEEP_DAYS = env("NOTIFICATION_KEEP_DAYS", 180, int)
 
 # Demo data (never in production)
 ALLOW_DEMO_DATA = env("ALLOW_DEMO_DATA", False, bool)
+
+# Rate limits and other cached counters. On serverless hosts each instance has its own memory, so keep
+# them in the database there (CACHE_BACKEND=database; `manage.py createcachetable` creates the table).
+if env("CACHE_BACKEND", "memory") == "database":
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.db.DatabaseCache", "LOCATION": "cmis_cache"}}
+
+# Vercel Cron calls /api/cron/housekeeping/ with "Authorization: Bearer <CRON_SECRET>".
+CRON_SECRET = env("CRON_SECRET", "")
 
 LOGGING = {
     "version": 1,

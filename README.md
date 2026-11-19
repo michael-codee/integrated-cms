@@ -16,7 +16,7 @@ areas with poor connectivity can keep working and synchronise later.
 |---|---|
 | Backend | Django 5.2 + Django REST Framework, PostgreSQL 16 |
 | Frontend | React 18 + TypeScript (Vite), Tailwind CSS, Recharts, Dexie (IndexedDB), Workbox |
-| Docs | [Architecture & database design](docs/ARCHITECTURE.md) · [Deployment](docs/DEPLOYMENT.md) · [Backup & restore](docs/BACKUP_AND_RESTORE.md) · [User manual](docs/USER_MANUAL.md) · [Administrator manual](docs/ADMIN_MANUAL.md) · [API](docs/API.md) · [Development log](DEVELOPMENT_LOG.md) |
+| Docs | [Architecture & database design](docs/ARCHITECTURE.md) · [Deployment](docs/DEPLOYMENT.md) · [Vercel + Supabase](docs/DEPLOY_VERCEL_SUPABASE.md) · [Backup & restore](docs/BACKUP_AND_RESTORE.md) · [User manual](docs/USER_MANUAL.md) · [Administrator manual](docs/ADMIN_MANUAL.md) · [API](docs/API.md) · [Development log](DEVELOPMENT_LOG.md) |
 
 ## Production (Docker)
 
@@ -27,6 +27,10 @@ docker compose exec api python manage.py provision_admin --role system_admin
 ```
 
 Full instructions, security notes and troubleshooting: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+## Production (Vercel + Supabase)
+
+The app and API run on Vercel, the database and files on Supabase: [docs/DEPLOY_VERCEL_SUPABASE.md](docs/DEPLOY_VERCEL_SUPABASE.md).
 
 ## Quick start (development)
 
@@ -70,5 +74,6 @@ cd frontend && npm run build && npx playwright test   # offline end-to-end test 
 backend/    Django project (config/, apps/<module>/)
 frontend/   React PWA (src/app, src/modules/<module>, src/offline, src/components/ui)
 docs/       Architecture, deployment, backup, manuals, API
-deploy/     Backup and restore scripts
+deploy/     Backup and restore scripts (Docker)
+api/        Vercel entry point for the Django API
 ```

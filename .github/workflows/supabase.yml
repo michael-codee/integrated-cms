@@ -1,0 +1,80 @@
+# Database tasks for the Vercel + Supabase deployment, run by hand from the Actions tab.
+# See docs/DEPLOY_VERCEL_SUPABASE.md. Needs the repository secrets SUPABASE_DB_URL (the
+# *Session pooler* connection string) and DJANGO_SECRET_KEY (the same value as on Vercel).
+name: Supabase database
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "What to run"
+        type: choice
+        options:
+          - "Update database (migrate)"
+          - "Create first administrator"
+        default: "Update database (migrate)"
+      role:
+        description: "Administrator role (only for 'Create first administrator')"
+        type: choice
+        options: [system_admin, general_overseer]
+        default: system_admin
+      username:
+        description: "Username (only for 'Create first administrator')"
+        required: false
+      email:
+        description: "Email (only for 'Create first administrator')"
+        required: false
+      full_name:
+        description: "Full name (only for 'Create first administrator')"
+        required: false
+
+concurrency:
+  group: supabase-database
+  cancel-in-progress: false
+
+jobs:
+  database:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+      DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+      DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+      DJANGO_ALLOWED_HOSTS: localhost
+      CACHE_BACKEND: database
+      STATIC_MANIFEST: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Check the secrets are set
+        run: |
+          test -n "$DATABASE_URL" || { echo "Add the SUPABASE_DB_URL repository secret first."; exit 1; }
+          test -n "$DJANGO_SECRET_KEY" || { echo "Add the DJANGO_SECRET_KEY repository secret first."; exit 1; }
+
+      - name: Migrate, seed and lock the Supabase Data API out
+        if: inputs.task == 'Update database (migrate)'
+        run: |
+          python manage.py migrate --noinput
+          python manage.py createcachetable
+          python manage.py seed_initial
+          python manage.py secure_supabase
+
+      - name: Create the first administrator
+        if: inputs.task == 'Create first administrator'
+        env:
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_INITIAL_PASSWORD }}
+          ROLE: ${{ inputs.role }}
+          ADMIN_USERNAME: ${{ inputs.username }}
+          ADMIN_EMAIL: ${{ inputs.email }}
+          ADMIN_FULL_NAME: ${{ inputs.full_name }}
+        run: |
+          test -n "$ADMIN_PASSWORD" || { echo "Add the ADMIN_INITIAL_PASSWORD repository secret first (delete it afterwards)."; exit 1; }
+          test -n "$ADMIN_USERNAME" && test -n "$ADMIN_EMAIL" && test -n "$ADMIN_FULL_NAME" || { echo "Fill in username, email and full name."; exit 1; }
+          python manage.py provision_admin --role "$ROLE" --username "$ADMIN_USERNAME" \
+            --email "$ADMIN_EMAIL" --full-name "$ADMIN_FULL_NAME" --password-env ADMIN_PASSWORD

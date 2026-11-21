@@ -185,6 +185,17 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
     new_password = serializers.CharField()
 
 
+class SetPasswordSerializer(serializers.Serializer):
+    password = serializers.CharField(style={"input_type": "password"}, trim_whitespace=False)
+
+
+class ChangeAssignmentSerializer(serializers.Serializer):
+    role = serializers.PrimaryKeyRelatedField(queryset=Role.objects.filter(is_active=True), required=False)
+    org_unit = serializers.PrimaryKeyRelatedField(queryset=OrgUnit.objects.all(), required=False)
+    ends_on = serializers.DateField(required=False, allow_null=True)
+    reason = serializers.CharField(required=False, allow_blank=True, default="")
+
+
 class StatusChangeSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=User.Status.choices)
     reason = serializers.CharField(required=False, allow_blank=True, default="")

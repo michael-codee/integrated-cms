@@ -40,7 +40,7 @@ export default function MembersPage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const tab = params.get('tab') === 'analytics' ? 'analytics' : 'register';
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState(() => params.get('new') === '1');
   const [search, setSearch] = useState(params.get('search') || '');
   const page = Number(params.get('page') || 1);
   const { data: categories = [] } = useLookup('membership-categories');

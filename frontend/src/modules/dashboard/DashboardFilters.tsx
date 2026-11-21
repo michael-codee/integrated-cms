@@ -16,7 +16,7 @@ export function DashboardFilters({ value, onChange }: { value: F; onChange: (f: 
   const set = (patch: Partial<F>) => onChange({ ...value, ...patch });
   const dirty = Object.values(value).some(Boolean);
   return (
-    <div className="no-print mb-6 flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900 sm:flex-row sm:flex-wrap sm:items-center">
+    <div className="no-print mb-6 flex flex-col gap-2 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-card dark:border-slate-700 dark:bg-slate-900 sm:flex-row sm:flex-wrap sm:items-center">
       {regions.length > 1 && (
         <Select value={value.region} onChange={(e) => set({ region: e.target.value, district: '', branch: '' })} className="sm:w-44" aria-label="Region">
           <option value="">All regions</option>{regions.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}

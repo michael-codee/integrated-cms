@@ -18,6 +18,15 @@ areas with poor connectivity can keep working and synchronise later.
 | Frontend | React 18 + TypeScript (Vite), Tailwind CSS, Recharts, Dexie (IndexedDB), Workbox |
 | Docs | [Architecture & database design](docs/ARCHITECTURE.md) · [Deployment](docs/DEPLOYMENT.md) · [Vercel + Supabase](docs/DEPLOY_VERCEL_SUPABASE.md) · [Backup & restore](docs/BACKUP_AND_RESTORE.md) · [User manual](docs/USER_MANUAL.md) · [Administrator manual](docs/ADMIN_MANUAL.md) · [API](docs/API.md) · [Development log](DEVELOPMENT_LOG.md) |
 
+## Try it free (GitHub Codespaces)
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/michael-codee/integrated-cms)
+
+Click the badge, then **Create codespace**. About five minutes later the app opens in a
+browser tab with made-up demo data, and the terminal shows a test login with its own
+random password. For testing only: never enter real records. Details:
+[.devcontainer/README.md](.devcontainer/README.md).
+
 ## Production (Docker)
 
 ```bash

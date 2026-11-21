@@ -25,8 +25,9 @@ def signed_url(name, request=None, max_age=None):
         return None
     expires = int(time.time()) + (max_age or settings.FILE_URL_MAX_AGE)
     token = signing.dumps({"n": name, "e": expires}, salt=SALT, compress=True)
-    url = reverse("signed-file", args=[token])
-    return request.build_absolute_uri(url) if request is not None else url
+    # Root-relative on purpose: the app and the API share one address everywhere (Docker, Vercel,
+    # Codespaces), and an absolute link would carry http:// when TLS ends at a proxy in front.
+    return reverse("signed-file", args=[token])
 
 
 class SignedFileField(serializers.FileField):

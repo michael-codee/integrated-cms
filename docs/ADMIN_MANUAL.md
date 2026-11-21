@@ -25,8 +25,20 @@ Safeguards built in:
 *Administration → Users*:
 - **Create user**: username, full name, email (optional but needed for self-service password reset), phone, title. Then **assign a role at a unit**.
 - **Suspend / deactivate**: takes effect immediately; the person's sessions stop working. Prefer this to deletion (accounts are never deleted, so history stays attributable).
-- **Reset link**: generates a one-time link for someone without email; give it to them in person or by phone. It expires after `PASSWORD_RESET_TOKEN_HOURS` (2).
-- **Unlock**: clears a lockout after repeated wrong passwords.
+Click a user to open their account. It has four tabs:
+
+- **Account & password**
+  - **Set password**: type a temporary password, or press **Generate**, then **Set password**. The person's open sessions end at once, any lockout is cleared, and they must choose their own password at the next sign-in. Tell them the temporary password in person or by phone.
+  - **Issue reset link**: the alternative, a one-time link that expires after `PASSWORD_RESET_TOKEN_HOURS` (2).
+  - **Suspend / Reactivate / Deactivate**, and **Unlock** after repeated wrong passwords.
+- **Details**: correct the name, title, username, email or phone.
+- **Roles & jurisdiction**
+  - **Change** on a role moves it to another unit (for example a pastor transferred from Bo to Kenema) or swaps it for another role. The old assignment ends today and the new one starts today, so the history stays visible under *Show past roles*. A reason entered here goes into the audit trail.
+  - **End** removes a role.
+  - **Add another role** gives the person an extra role at any unit.
+- **Access review**: what the person can do today, module by module, and which role gives each permission (hover over a tick). To change what a role allows for everyone who holds it, use *Roles & permissions*.
+
+Every one of these actions is recorded in the audit trail. You can only manage people at or below your own level and within your jurisdiction, and never your own account.
 
 When someone leaves a post, end their assignment (or suspend the account) the same day. Review the user list every quarter.
 

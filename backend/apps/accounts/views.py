@@ -26,6 +26,7 @@ from apps.organization.models import OrgUnit
 from .signals import account_created
 from .models import PasswordResetToken, Permission, Role, RoleAssignment, User
 from .serializers import (
+    ChangeAssignmentSerializer,
     ChangePasswordSerializer,
     LoginSerializer,
     MeSerializer,
@@ -34,6 +35,7 @@ from .serializers import (
     PermissionSerializer,
     RoleAssignmentSerializer,
     RoleSerializer,
+    SetPasswordSerializer,
     StatusChangeSerializer,
     UserSerializer,
 )
@@ -276,7 +278,8 @@ class UserViewSet(ScopedViewMixin, mixins.ListModelMixin, mixins.RetrieveModelMi
     module = "users"
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated, ModulePermission]
-    action_permissions = {"set_status": "edit", "reset_link": "edit", "unlock": "edit"}
+    action_permissions = {"set_status": "edit", "reset_link": "edit", "unlock": "edit", "set_password": "edit",
+                          "access": "view"}
     search_fields = ["full_name", "username", "email", "phone"]
     filterset_fields = ["status"]
     ordering_fields = ["full_name", "created_at", "last_login"]
@@ -336,6 +339,46 @@ class UserViewSet(ScopedViewMixin, mixins.ListModelMixin, mixins.RetrieveModelMi
         audit.record(AuditLog.Action.PASSWORD_RESET, instance=target, message="Administrator issued reset link")
         return Response({"link": f"{settings.FRONTEND_URL}/reset-password?token={raw}",
                          "expires_in_hours": settings.PASSWORD_RESET_TOKEN_HOURS})
+
+    @extend_schema(request=SetPasswordSerializer, responses={200: None})
+    @action(detail=True, methods=["post"], url_path="set-password")
+    def set_password(self, request, pk=None):
+        """Give the user a temporary password. They must choose their own at the next sign-in, and every
+        session they have open stops working at once."""
+        target = self.get_object()
+        if not can_manage_user(request.user, target):
+            raise PermissionDenied("You cannot reset this account's password.")
+        serializer = SetPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        password = serializer.validated_data["password"]
+        try:
+            password_validation.validate_password(password, target)
+        except Exception as exc:  # Django's ValidationError carries the messages
+            raise ValidationError({"password": list(getattr(exc, "messages", [str(exc)]))})
+        target.set_password(password)
+        target.must_change_password = True
+        target.failed_login_count = 0
+        target.locked_until = None
+        target.save()
+        PasswordResetToken.objects.filter(user=target, used_at__isnull=True).update(used_at=timezone.now())
+        audit.record(AuditLog.Action.PASSWORD_RESET, instance=target,
+                     message="Administrator set a temporary password")
+        return Response({"detail": "Temporary password set. The user must change it at the next sign-in."})
+
+    @action(detail=True, methods=["get"])
+    def access(self, request, pk=None):
+        """What the user can do today, and where: every current role assignment with its permissions."""
+        target = self.get_object()
+        current = (RoleAssignment.objects.current().filter(user=target)
+                   .select_related("role", "org_unit").prefetch_related("role__permissions"))
+        grants, union = [], set()
+        for a in current:
+            perms = sorted(a.role.permissions.values_list("code", flat=True))
+            union.update(perms)
+            grants.append({"assignment": str(a.pk), "role": a.role.name, "role_code": a.role.code,
+                           "org_unit": a.org_unit.name, "org_unit_type": a.org_unit.unit_type,
+                           "permissions": perms})
+        return Response({"assignments": grants, "permissions": sorted(union)})
 
     @action(detail=True, methods=["post"])
     def unlock(self, request, pk=None):
@@ -409,6 +452,7 @@ class RoleAssignmentViewSet(ScopedViewMixin, viewsets.ModelViewSet):
     module = "users"
     serializer_class = RoleAssignmentSerializer
     permission_classes = [permissions.IsAuthenticated, ModulePermission]
+    action_permissions = {"change": "edit"}
     filterset_fields = ["user", "role", "org_unit", "is_active"]
 
     def get_queryset(self):
@@ -426,6 +470,45 @@ class RoleAssignmentViewSet(ScopedViewMixin, viewsets.ModelViewSet):
         a = serializer.save(updated_by=self.request.user)
         audit.record(AuditLog.Action.UPDATE, instance=a, org_unit=a.org_unit,
                      changes=audit.diff(before, audit.snapshot(a)))
+
+    @extend_schema(request=ChangeAssignmentSerializer, responses={201: RoleAssignmentSerializer})
+    @action(detail=True, methods=["post"])
+    @transaction.atomic
+    def change(self, request, pk=None):
+        """Move a role to another unit (jurisdiction) or swap the role, keeping history: the current
+        assignment ends today and a new one starts today."""
+        old = self.get_object()
+        if old.user_id == request.user.pk:
+            raise PermissionDenied("You cannot change your own role assignments.")
+        if not old.is_active:
+            raise ValidationError({"detail": "This assignment has already ended."})
+        if not scoping.can(request.user, "users.edit", old.org_unit):
+            raise PermissionDenied("Outside your jurisdiction.")
+        if old.role.level < scoping.senior_level_at(request.user, old.org_unit):
+            raise PermissionDenied("You cannot change a role more senior than your own.")
+        params = ChangeAssignmentSerializer(data=request.data)
+        params.is_valid(raise_exception=True)
+        data = params.validated_data
+        role, unit = data.get("role", old.role), data.get("org_unit", old.org_unit)
+        if role == old.role and unit == old.org_unit and "ends_on" not in data:
+            raise ValidationError({"detail": "Choose a different role, unit or end date."})
+        today = timezone.localdate()
+        new = RoleAssignmentSerializer(data={
+            "user": old.user_id, "role": role.pk, "org_unit": unit.pk, "starts_on": today,
+            "ends_on": data.get("ends_on", old.ends_on), "notes": data.get("reason") or old.notes,
+            "department_id": old.department_id,
+        }, context={"request": request})
+        new.is_valid(raise_exception=True)
+        old.is_active = False
+        old.ends_on = today
+        old.save(update_fields=["is_active", "ends_on", "updated_at"])
+        a = new.save(granted_by=request.user, created_by=request.user)
+        audit.record(AuditLog.Action.UPDATE, instance=a, org_unit=a.org_unit,
+                     changes={"role": [old.role.code, a.role.code], "org_unit": [old.org_unit.name, a.org_unit.name],
+                              "user": [old.user.username, a.user.username]},
+                     message=data.get("reason") or "Role assignment changed")
+        return Response(RoleAssignmentSerializer(a, context={"request": request}).data,
+                        status=status.HTTP_201_CREATED)
 
     def perform_destroy(self, instance):
         """Assignments are ended, not deleted, so the history is kept."""

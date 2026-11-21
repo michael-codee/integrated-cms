@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
+import { UpdateBanner } from '../offline/UpdateBanner';
 import { CloudOff, KeyRound, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Sun, UserRound, Wifi, X } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { NAV } from './nav';
@@ -196,6 +197,7 @@ export function Layout() {
 
   return (
     <div className="min-h-screen bg-mist dark:bg-slate-950">
+      <UpdateBanner />
       <aside className={clsx('fixed inset-y-0 left-0 z-30 hidden transition-[width] duration-200 ease-out lg:block', collapsed ? 'w-[76px]' : 'w-64')}>
         <Sidebar collapsed={collapsed} onToggle={toggleCollapsed} />
       </aside>

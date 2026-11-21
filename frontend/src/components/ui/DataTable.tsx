@@ -24,10 +24,10 @@ export function DataTable<T extends { id?: string | number }>({
     <div>
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
-          <thead className="bg-slate-50/80 dark:bg-slate-800/60">
+          <thead className="bg-mist dark:bg-slate-800/60">
             <tr>
               {columns.map((c) => (
-                <th key={c.key} scope="col" className={clsx('px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400',
+                <th key={c.key} scope="col" className={clsx('px-4 py-2.5 text-left text-xs font-semibold text-slate-600 dark:text-slate-300',
                   c.hideOnMobile && 'hidden md:table-cell', c.align === 'right' && 'text-right', c.align === 'center' && 'text-center', c.className)}>
                   {c.header}
                 </th>
@@ -40,7 +40,7 @@ export function DataTable<T extends { id?: string | number }>({
             ) : rows && rows.length > 0 ? (
               rows.map((row, i) => (
                 <tr key={rowKey ? rowKey(row) : String(row.id ?? i)} onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  className={clsx(onRowClick && 'cursor-pointer hover:bg-royal-50/50 dark:hover:bg-slate-800/60', rowClassName?.(row))}>
+                  className={clsx(onRowClick && 'cursor-pointer transition-colors hover:bg-royal-50/70 active:bg-gold-50 dark:hover:bg-slate-800/60 dark:active:bg-gold-400/10', rowClassName?.(row))}>
                   {columns.map((c) => (
                     <td key={c.key} className={clsx('px-4 py-3 align-middle text-slate-700 dark:text-slate-200', c.hideOnMobile && 'hidden md:table-cell',
                       c.align === 'right' && 'text-right tabular-nums', c.align === 'center' && 'text-center', c.className)}>
@@ -59,8 +59,8 @@ export function DataTable<T extends { id?: string | number }>({
         <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-slate-500 dark:border-slate-800">
           <span>{total.toLocaleString()} records · page {page} of {pages}</span>
           <div className="flex gap-1">
-            <button className="rounded-md p-1.5 hover:bg-slate-100 disabled:opacity-40 dark:hover:bg-slate-800" disabled={(page || 1) <= 1} onClick={() => onPage((page || 1) - 1)} aria-label="Previous page"><ChevronLeft className="h-4 w-4" /></button>
-            <button className="rounded-md p-1.5 hover:bg-slate-100 disabled:opacity-40 dark:hover:bg-slate-800" disabled={(page || 1) >= pages} onClick={() => onPage((page || 1) + 1)} aria-label="Next page"><ChevronRight className="h-4 w-4" /></button>
+            <button className="rounded-lg p-1.5 ring-1 ring-inset ring-slate-200 transition hover:bg-royal-50 hover:text-royal-800 enabled:active:scale-90 disabled:opacity-40 dark:ring-slate-700 dark:hover:bg-slate-800" disabled={(page || 1) <= 1} onClick={() => onPage((page || 1) - 1)} aria-label="Previous page"><ChevronLeft className="h-4 w-4" /></button>
+            <button className="rounded-lg p-1.5 ring-1 ring-inset ring-slate-200 transition hover:bg-royal-50 hover:text-royal-800 enabled:active:scale-90 disabled:opacity-40 dark:ring-slate-700 dark:hover:bg-slate-800" disabled={(page || 1) >= pages} onClick={() => onPage((page || 1) + 1)} aria-label="Next page"><ChevronRight className="h-4 w-4" /></button>
           </div>
         </div>
       )}

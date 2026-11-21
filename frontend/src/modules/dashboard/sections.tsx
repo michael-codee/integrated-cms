@@ -5,8 +5,8 @@
  */
 import { lazy, Suspense, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, ArrowRight, Building2, CalendarDays, CheckCircle2, Church, Droplets, Globe2, HeartHandshake, Megaphone, Pin, Sparkles, TrendingUp, UserPlus, Users } from 'lucide-react';
-import { Card, CardBody, CardHeader, PageLoader, StatCard } from '@/components/ui';
+import { AlertCircle, ArrowRight, Boxes, Building2, CalendarCheck, CalendarDays, FileBarChart, Landmark, CheckCircle2, Church, Droplets, Globe2, HeartHandshake, Megaphone, Pin, Sparkles, TrendingUp, UserPlus, Users } from 'lucide-react';
+import { Card, CardBody, CardHeader, PageLoader, SectionTitle, StatCard } from '@/components/ui';
 import { BarsChart, ChartCard, DonutChart, TrendChart, monthLabel } from '@/components/charts';
 import { dateTime, num } from '@/lib/format';
 import { StatusBadge } from '@/components/ui';
@@ -56,10 +56,10 @@ function StructureKpis({ data }: { data: DashboardData }) {
   if (!s) return null;
   return (
     <div className="grid grid-cols-2 gap-4">
-      <StatCard label="Regions" value={num(s.regions)} icon={<Globe2 className="h-5 w-5" />} to="/structure" tone="slate" />
-      <StatCard label="Districts" value={num(s.districts)} icon={<Building2 className="h-5 w-5" />} to="/structure" tone="slate" />
+      <StatCard label="Regions" value={num(s.regions)} icon={<Globe2 className="h-5 w-5" />} to="/structure" tone="river" />
+      <StatCard label="Districts" value={num(s.districts)} icon={<Building2 className="h-5 w-5" />} to="/structure" tone="royal" />
       <StatCard label="Operational branches" value={num(s.branches)} hint={s.inactive_branches ? `${s.inactive_branches} inactive` : s.planned ? `${s.planned} planned` : undefined} icon={<Church className="h-5 w-5" />} to="/structure" tone="gold" />
-      <StatCard label="Congregations" value={num(s.congregations)} icon={<Users className="h-5 w-5" />} to="/structure" tone="slate" />
+      <StatCard label="Congregations" value={num(s.congregations)} icon={<Users className="h-5 w-5" />} to="/structure" tone="purple" />
     </div>
   );
 }
@@ -70,13 +70,13 @@ function MembershipSection({ data }: { data: DashboardData }) {
   const growth = m.growth.map((g) => ({ ...g, label: monthLabel(g.month) }));
   return (
     <section className="space-y-4">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Membership</h2>
+      <SectionTitle icon={<Users />}>Membership</SectionTitle>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <StatCard label="Total members" value={num(m.total)} hint={`${num(m.active)} active · ${num(m.inactive)} inactive`} icon={<Users className="h-5 w-5" />} to="/members" />
         <StatCard label="New this month" value={num(m.new_this_month)} hint={`${num(m.new_this_year)} this year`} icon={<UserPlus className="h-5 w-5" />} tone="green" to="/members?tab=analytics" />
         <StatCard label="Baptized" value={num(m.baptized)} icon={<Droplets className="h-5 w-5" />} tone="purple" />
         <StatCard label="Transfers this year" value={num(m.transfers_this_year)} icon={<ArrowRight className="h-5 w-5" />} tone="gold" to="/members/transfers" />
-        <StatCard label="12-month growth" value={m.growth_rate_year == null ? '—' : `${m.growth_rate_year > 0 ? '+' : ''}${m.growth_rate_year}%`} icon={<TrendingUp className="h-5 w-5" />} tone="slate" />
+        <StatCard label="12-month growth" value={m.growth_rate_year == null ? '—' : `${m.growth_rate_year > 0 ? '+' : ''}${m.growth_rate_year}%`} icon={<TrendingUp className="h-5 w-5" />} tone="river" />
       </div>
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
@@ -121,7 +121,7 @@ function FinanceSection({ data }: { data: DashboardData }) {
   if (!f) return null;
   return (
     <section className="space-y-4">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Finance {f.financial_year ? `· ${f.financial_year}` : ''}</h2>
+      <SectionTitle icon={<Landmark />} tone="gold">Finance{f.financial_year ? `, ${f.financial_year}` : ''}</SectionTitle>
       <Suspense fallback={<PageLoader />}><FinanceFigures data={f} /></Suspense>
     </section>
   );
@@ -132,7 +132,7 @@ function AssetsSection({ data }: { data: DashboardData }) {
   if (!a) return null;
   return (
     <section className="space-y-4">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Assets &amp; property</h2>
+      <SectionTitle icon={<Boxes />} tone="slate">Assets &amp; property</SectionTitle>
       <Suspense fallback={<PageLoader />}><AssetFigures s={a} /></Suspense>
     </section>
   );
@@ -145,7 +145,7 @@ function ProgramsSection({ data }: { data: DashboardData }) {
   if (!p) return null;
   return (
     <section className="space-y-4">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Programs &amp; events</h2>
+      <SectionTitle icon={<CalendarDays />} tone="purple">Programs &amp; events</SectionTitle>
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="grid grid-cols-2 gap-4">
           <StatCard label="Programs this year" value={num(p.this_year)} hint={`${num(p.completed)} held`} icon={<CalendarDays className="h-5 w-5" />} to="/programs" />
@@ -176,7 +176,7 @@ function AttendanceSection({ data }: { data: DashboardData }) {
   if (!a || !a.gatherings) return null;
   return (
     <section className="space-y-4">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Attendance</h2>
+      <SectionTitle icon={<CalendarCheck />} tone="green">Attendance</SectionTitle>
       <Suspense fallback={<PageLoader />}><AttendanceFigures s={a} /></Suspense>
     </section>
   );
@@ -210,14 +210,14 @@ function ReportsSection({ data }: { data: DashboardData }) {
   if (!r?.compliance.length) return null;
   return (
     <section className="space-y-4">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Reporting compliance</h2>
+      <SectionTitle icon={<FileBarChart />} tone="river">Reporting compliance</SectionTitle>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {r.compliance.map((c) => (
           <Card key={c.template.id}>
             <CardHeader title={c.template.name} subtitle={`${c.period.label} · ${c.expected} expected`} actions={<Link to="/reports?tab=compliance" className="text-xs font-medium text-royal-700 hover:underline dark:text-royal-300">Details</Link>} />
             <CardBody>
-              <div className="flex items-baseline gap-2"><span className="text-3xl font-semibold tabular-nums">{c.rate ?? 0}%</span><span className="text-sm text-slate-500">submitted · {c.on_time_rate ?? 0}% on time</span></div>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-full rounded-full bg-royal-600" style={{ width: `${c.rate ?? 0}%` }} /></div>
+              <div className="flex items-baseline gap-2"><span className="font-display text-3xl font-semibold text-ink-900 dark:text-white">{c.rate ?? 0}%</span><span className="text-sm text-slate-500">submitted · {c.on_time_rate ?? 0}% on time</span></div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-full rounded-full bg-gradient-to-r from-royal-600 to-river-500" style={{ width: `${c.rate ?? 0}%` }} /></div>
               {c.overdue_count > 0 && <p className="mt-3 text-xs text-red-700 dark:text-red-300">Overdue: {c.overdue.slice(0, 4).map((o) => o.org_unit_name).join(', ')}{c.overdue_count > 4 ? ` and ${c.overdue_count - 4} more` : ''}</p>}
             </CardBody>
           </Card>

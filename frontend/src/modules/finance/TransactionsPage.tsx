@@ -27,7 +27,7 @@ export default function TransactionsPage() {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [page, setPage] = useState(1);
-  const [form, setForm] = useState<TxnKind | null>(null);
+  const [form, setForm] = useState<TxnKind | null>(() => (['income', 'expense'].includes(params.get('new') || '') ? params.get('new') as TxnKind : null));
   const cats = useLookup('finance-categories');
   const query = { kind: tab === 'all' ? undefined : tab, search: search || undefined, org_unit: unit || undefined, status: status || undefined, category: category || undefined, date_from: from || undefined, date_to: to || undefined };
   const { data, isFetching } = useQuery({

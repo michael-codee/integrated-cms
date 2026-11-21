@@ -60,7 +60,7 @@ export default function AttendancePage() {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [page, setPage] = useState(1);
-  const [editing, setEditing] = useState<AttendanceRecord | true | null>(null);
+  const [editing, setEditing] = useState<AttendanceRecord | true | null>(() => (params.get('new') === '1' ? true : null));
   const services = useLookup('service-types');
   const query = { org_unit: unit || undefined, service_type: service || undefined, date_from: from || undefined, date_to: to || undefined, ordering: '-date' };
   const list = useQuery({ queryKey: ['attendance', 'list', query, page], queryFn: () => api<Page<AttendanceRecord>>('/attendance/', { params: { ...query, page } }), placeholderData: keepPreviousData, enabled: tab === 'records' });

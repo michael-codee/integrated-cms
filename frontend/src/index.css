@@ -4,17 +4,26 @@
 
 @layer base {
   html { -webkit-tap-highlight-color: transparent; }
-  body { @apply bg-slate-50 font-sans text-slate-800 antialiased dark:bg-slate-950 dark:text-slate-200; }
+  body { @apply bg-mist font-sans text-slate-800 antialiased dark:bg-slate-950 dark:text-slate-200; }
+  h1, .font-display { font-family: theme('fontFamily.display'); font-feature-settings: 'lnum'; }
+  :focus-visible { outline-color: theme('colors.gold.400'); }
   input[type='date']::-webkit-calendar-picker-indicator { opacity: 0.6; }
   .dark input[type='date']::-webkit-calendar-picker-indicator { filter: invert(1); }
 }
 
 @media print {
   aside, header, .no-print { display: none !important; }
-  .lg\:pl-64 { padding-left: 0 !important; }
+  .app-main { padding-left: 0 !important; }
   body { background: white !important; }
 }
 
 :root { --tt-bg: #ffffff; --tt-fg: #0f172a; --chart-surface: #ffffff; }
 .dark { --tt-bg: #0f172a; --tt-fg: #e2e8f0; --chart-surface: #0f172a; }
 .recharts-legend-item-text { color: inherit !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}
+
+/* The river line under the sidebar and the dashboard band. */
+.river-wave { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 120' preserveAspectRatio='none'%3E%3Cpath d='M0 70 C 200 20 350 120 600 70 S 1000 20 1200 70 V120 H0Z' fill='%232a8bd8' fill-opacity='.18'/%3E%3Cpath d='M0 90 C 250 50 400 130 650 90 S 1000 50 1200 95 V120 H0Z' fill='%237cc0f2' fill-opacity='.14'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-size: 100% 100%; }

@@ -4,6 +4,7 @@ import { RouterProvider } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@fontsource-variable/inter';
 import '@fontsource/lora/400-italic.css';
+import '@fontsource/lora/600.css';
 import './index.css';
 import { AuthProvider } from './app/AuthContext';
 import { router } from './app/routes';

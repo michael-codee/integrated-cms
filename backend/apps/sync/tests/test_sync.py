@@ -98,7 +98,7 @@ def test_bulk_created_rows_reach_the_pull_feed(people, units):
 
     st = ServiceType.objects.first()
     AttendanceRecord.objects.bulk_create([
-        AttendanceRecord(org_unit=units["BR-KONO-001"], service_type=st, date=datetime.date(2024, 1, d), men=1)
+        AttendanceRecord(org_unit=units["BR-KONO-001"], service_type=st, date=datetime.date(2024, 1, d), men=1, male=1)
         for d in (7, 14)])
     assert not AttendanceRecord.objects.filter(sync_seq=0).exists()
     rows = jwt(people["pastor_koidu"]).get("/api/sync/pull/?entity=attendance&cursor=0").data["results"]

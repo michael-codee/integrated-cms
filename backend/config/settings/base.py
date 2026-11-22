@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     "apps.sync",
     "apps.reports",
     "apps.documents",
+    "apps.presentation",
 ]
 
 MIDDLEWARE = [

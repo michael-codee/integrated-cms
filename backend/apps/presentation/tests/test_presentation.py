@@ -104,6 +104,7 @@ def test_service_plan_scoped_to_branch(api, people, units, media_user):
     ({"kind": "video", "video": "../../etc/passwd"}, "video from this computer"),
     ({"kind": "blank", "notes": "x" * 2001}, "too long"),
     ({"kind": "scripture", "ref": "hello"}, "Bible reference"),
+    ({"kind": "scripture", "ref": "John 3:16", "version": "../niv"}, "unknown Bible translation"),
     ({"kind": "song", "song": "not-a-uuid"}, "choose a song"),
     ({"kind": "song", "song": "8b0f7c55-0f55-4c51-9d55-0b9c7a3c0e11"}, "no longer in the library"),
     ({"kind": "text", "title": "", "body": ""}, "needs a title"),
@@ -136,6 +137,22 @@ def test_video_camera_and_notes_items(api, units, media_user):
                                                       "theme": {"background_video": "https://x.example/v.mp4"}},
                                format="json")
     assert bad.status_code == 400 and "background video" in str(bad.data["theme"])
+
+
+def test_scripture_translation_choice(api, units, media_user):
+    items = [{"kind": "scripture", "ref": "Psalm 23", "version": "bsb"},
+             {"kind": "scripture", "ref": "John 3:16", "version": "local-niv"},
+             {"kind": "scripture", "ref": "Romans 8:28"}]
+    r = api(media_user).post("/api/media/plans/", {"org_unit": str(units["BR-KONO-001"].pk), "title": "x",
+                                                    "service_date": "2026-11-29", "items": items,
+                                                    "theme": {"bible": "asv"}}, format="json")
+    assert r.status_code == 201, r.data
+    assert [i.get("version") for i in r.data["items"]] == ["bsb", "local-niv", None]
+    assert r.data["theme"]["bible"] == "asv"
+    bad = api(media_user).post("/api/media/plans/", {"org_unit": str(units["BR-KONO-001"].pk), "title": "x",
+                                                      "service_date": "2026-11-29", "theme": {"bible": "NIV 2011!"}},
+                               format="json")
+    assert bad.status_code == 400 and "translation" in str(bad.data["theme"])
 
 
 def test_unknown_theme_keys_refused(api, units, media_user):

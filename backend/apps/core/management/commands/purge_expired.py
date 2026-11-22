@@ -14,7 +14,7 @@ from django.utils import timezone
 
 
 class Command(BaseCommand):
-    help = "Delete expired idempotency records, password reset links, refresh tokens and old read notifications."
+    help = "Delete expired idempotency records, password reset links, phone remote links, refresh tokens and old read notifications."
 
     def add_arguments(self, parser):
         parser.add_argument("--dry-run", action="store_true", help="Only report what would be deleted.")
@@ -22,6 +22,7 @@ class Command(BaseCommand):
     def handle(self, *args, dry_run=False, **options):
         from apps.accounts.models import PasswordResetToken
         from apps.notifications.models import Notification
+        from apps.presentation.models import RemoteSession
         from apps.sync.models import IdempotencyRecord
 
         now = timezone.now()
@@ -30,6 +31,7 @@ class Command(BaseCommand):
                 created_at__lt=now - timedelta(days=settings.IDEMPOTENCY_KEEP_DAYS)),
             "password reset links": PasswordResetToken.objects.filter(
                 Q(expires_at__lt=now - timedelta(days=1)) | Q(used_at__lt=now - timedelta(days=1))),
+            "phone remote links": RemoteSession.objects.filter(expires_at__lt=now - timedelta(days=1)),
             "read notifications": Notification.objects.filter(
                 read_at__isnull=False, created_at__lt=now - timedelta(days=settings.NOTIFICATION_KEEP_DAYS)),
         }

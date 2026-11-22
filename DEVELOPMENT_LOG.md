@@ -291,3 +291,25 @@ known limitations, phase by phase.
 
 **Known limitations:** videos must be added on each media computer; the camera picture is not mixed with slides (a caption is the only overlay). Phone remote and other Bible translations remain for a later phase.
 
+---
+
+## Media presentation, phase 3 — phone remote and more Bible translations  ✅
+
+**Completed — phone remote**
+
+- `RemoteSession` / `RemoteCommand` (migration `presentation.0003`). The desk (`media.view`) opens a session with `POST /api/media/remote/` and shows a QR code for `/presentation/remote#<token>`; only a SHA-256 hash of the 32-character token is stored. One session per person: opening a new one ends the old link. Sessions end after 8 hours or with **End remote**; `purge_expired` deletes them a day after expiry.
+- The phone (no account; `X-Remote-Token` is its only key, per-token throttle `media_remote`, default 300/min) reads the desk's published state and sends presses: next, back, black, clear, logo, show, play, slide *n*, item *n*. At most 40 presses can wait, so a closed desk does not let them pile up.
+- The desk polls `POST /api/media/remote/<id>/sync/` every second: it sends a compact summary of the screen (plan, item title, words on screen, slide and item lists, next slide, mode, video playing) only when it changed, and collects new presses, which it applies through its own controls. The screens still change only through the desk; the projector link between desk and projector stays local and offline.
+- Phone page: words on screen, next slide, large Back/Next, Black/Clear/Logo, Play/Pause when a video is on, tabs to jump to a slide or an item, warnings when offline or when the desk is not open; keeps the phone's screen on (Wake Lock) where allowed.
+- New dependency: `qrcode-generator` 1.4.4 (no dependencies) for the QR code.
+
+**Completed — Bible translations**
+
+- Built in (public domain, `/bible/<id>.json`, same format as KJV, normalised to the KJV book names and verse numbering): **ASV** (1901), **World English Bible**, **Berean Standard Bible**. Verses left out of a translation (Acts 8:37 etc.) are stored empty and skipped when shown. The service worker keeps up to 8 translations.
+- A plan's translation lives in `theme.bible`; a scripture item may name its own (`version`). Both are validated on the server (`kjv`, `asv` … or `local-<code>`). The slide footer and item title show the short name (e.g. *John 3:16 (BSB)*). Quick scripture has its own translation choice.
+- **Licensed translations** (NIV, NKJV, ESV, NLT, CEV, TPT, AMP were requested) are not shipped: *Translations… → Import a licensed translation* reads the ministry's own copy from a JSON (several common layouts), CSV/TSV or one-verse-per-line file on the media computer and keeps it in IndexedDB (`rlwm-bibles-local`), never on the server. The import asks the user to confirm the ministry holds a licence from the publisher.
+
+**Tests:** 3 new backend tests (presses reach the desk, token-only access and ending, limits/expiry/cleanup) and 2 validation cases (translation on items and theme); 12 new frontend unit tests (each built-in translation, omitted verses, plan vs passage translation, import formats and errors, remote state size). Browser run with a desktop desk and an emulated phone: pairing by link, Next, Black, jumping to an item and a slide from the phone, desk shows "Phone connected", ending the remote; BSB and WEB scripture; importing a sample file as NIV and showing it.
+
+**Known limitations:** the remote needs the internet on both devices (or a local server) and reacts within about a second; one phone link per person at a time. Licensed translations must be imported on each media computer, from a file the ministry obtains under its licence.
+

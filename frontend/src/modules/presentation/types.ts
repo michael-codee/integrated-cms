@@ -27,7 +27,8 @@ interface ItemBase { key: string; label?: string; notes?: string }
 
 export type PlanItem = ItemBase & (
   | { kind: 'song'; song: string }
-  | { kind: 'scripture'; ref: string }
+  /** version: a translation id (kjv, asv, web, bsb or local-…); none = the plan's translation. */
+  | { kind: 'scripture'; ref: string; version?: string }
   | { kind: 'text'; title: string; body: string }
   | { kind: 'image'; image: string }
   /** A video kept on the media computer: its local id, and the file name to find it on another computer. */
@@ -47,6 +48,8 @@ export interface Theme {
   align?: 'center' | 'left';
   show_reference?: boolean;
   uppercase?: boolean;
+  /** The plan's Bible translation (id). */
+  bible?: string;
 }
 
 export interface ServicePlan {

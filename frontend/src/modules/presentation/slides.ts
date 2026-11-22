@@ -1,4 +1,4 @@
-import { lookup, type Bible } from './bible';
+import { DEFAULT_VERSION, lookup, shortName, type Bible } from './bible';
 import type { MediaImage, PlanItem, Slide, Song } from './types';
 
 const SECTION = /^\[(.+)\]$/;
@@ -29,7 +29,7 @@ export function songSlides(song: Pick<Song, 'title' | 'lyrics' | 'author' | 'cop
 }
 
 /** One verse per slide, the verse number kept in front of the words. */
-export function scriptureSlides(bible: Bible, ref: string, version = 'KJV'): Slide[] {
+export function scriptureSlides(bible: Bible, ref: string, version = bible.short || shortName(bible.id)): Slide[] {
   const p = lookup(bible, ref);
   return p.verses.map((v) => ({
     kind: 'scripture' as const,
@@ -46,7 +46,12 @@ export function textSlides(title: string, body: string): Slide[] {
 }
 
 export interface SlideContext {
-  bible?: Bible;
+  /** Translations loaded so far, by id. */
+  bibles?: Record<string, Bible | undefined>;
+  /** Why a translation could not be loaded, by id. */
+  bibleErrors?: Record<string, string | undefined>;
+  /** The translation for scripture items that do not name one (the plan's choice). */
+  version?: string;
   songs: Record<string, Song | undefined>;
   images: Record<string, MediaImage | undefined>;
 }
@@ -72,7 +77,7 @@ export function itemTitle(item: PlanItem, ctx: SlideContext): string {
   if (item.label) return item.label;
   switch (item.kind) {
     case 'song': return ctx.songs[item.song]?.title || 'Song';
-    case 'scripture': return item.ref;
+    case 'scripture': return item.version ? `${item.ref} (${shortName(item.version)})` : item.ref;
     case 'text': return item.title || item.body.split('\n')[0] || 'Text';
     case 'image': return ctx.images[item.image]?.title || 'Picture';
     case 'video': return item.name.replace(/\.[a-z0-9]{2,4}$/i, '') || 'Video';
@@ -88,13 +93,19 @@ export function slidesFor(item: PlanItem, ctx: SlideContext): ItemSlides {
       if (!song) return { slides: [], loading: true };
       return { slides: songSlides(song) };
     }
-    case 'scripture':
-      if (!ctx.bible) return { slides: [], loading: true };
+    case 'scripture': {
+      const version = versionOf(item, ctx);
+      const bible = ctx.bibles?.[version];
+      if (!bible) {
+        const error = ctx.bibleErrors?.[version];
+        return error ? { slides: [], error } : { slides: [], loading: true };
+      }
       try {
-        return { slides: scriptureSlides(ctx.bible, item.ref) };
+        return { slides: scriptureSlides(bible, item.ref) };
       } catch (e) {
         return { slides: [], error: (e as Error).message };
       }
+    }
     case 'text':
       return { slides: textSlides(item.title, item.body) };
     case 'image':
@@ -106,4 +117,9 @@ export function slidesFor(item: PlanItem, ctx: SlideContext): ItemSlides {
     case 'blank':
       return { slides: [{ kind: 'blank', lines: [] }] };
   }
+}
+
+/** The translation a scripture item is shown in. */
+export function versionOf(item: PlanItem, ctx: Pick<SlideContext, 'version'>) {
+  return (item.kind === 'scripture' && item.version) || ctx.version || DEFAULT_VERSION;
 }

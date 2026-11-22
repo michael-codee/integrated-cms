@@ -7,7 +7,7 @@ export interface TxnListItem {
   id: string; reference: string | null; kind: TxnKind; org_unit: string; org_unit_name: string; account_name: string;
   category: string; category_name: string; amount: string; currency: string; transaction_date: string; party: string;
   member_name: string | null; status: TxnStatus; current_step: number; required_steps: Step[]; reversal_of: string | null;
-  version: number; is_demo: boolean; sync_state?: string;
+  version: number; is_demo: boolean; sync_state?: string; dues_month: string | null; dues_months: number | null;
 }
 
 export interface Approval { id: string; step: number; step_label: string; decision: 'submitted' | 'approved' | 'rejected' | 'returned'; comment: string; by: string; created_at: string }
@@ -59,3 +59,28 @@ export const STATUS_LABEL: Record<TxnStatus, string> = {
 export const METHODS: [string, string][] = [['cash', 'Cash'], ['bank_transfer', 'Bank transfer'], ['mobile_money', 'Mobile money'], ['cheque', 'Cheque'], ['other', 'Other']];
 export const ACCOUNT_KINDS: [string, string][] = [['cash', 'Cash'], ['bank', 'Bank account'], ['mobile_money', 'Mobile money']];
 export const LEVELS: [string, string][] = [['unit', 'Own unit (e.g. Pastor-in-Charge)'], ['district', 'District'], ['region', 'Region'], ['headquarters', 'Headquarters']];
+
+export const DUES_CATEGORY = 'membership-dues';
+export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+export interface DuesMember { id: string; full_name: string; membership_no: string | null; org_unit: string; org_unit_name: string; status: string; joined_on: string }
+export interface DuesRow {
+  id?: string;
+  member: DuesMember; paid: string[]; pending: string[]; months_paid: number; total_paid: string; total_pending: string;
+  entries: { id: string; reference: string | null; status: TxnStatus; amount: string; currency: string; from: string; months: number }[];
+}
+export interface DuesRegister {
+  year: number; count: number; page: number; page_size: number; results: DuesRow[];
+  totals: { paid: string; pending: string; paid_by_month: string[]; members_paid_by_month: number[] } | null;
+}
+
+/** "2026-03-01", 3 → "March – May 2026" */
+export function duesPeriodLabel(first: string | null, months: number | null) {
+  if (!first) return '';
+  const [y, m] = first.split('-').map(Number);
+  const start = new Date(y, m - 1, 1);
+  const end = new Date(y, m - 1 + (months || 1) - 1, 1);
+  const fmt = (d: Date, withYear: boolean) => d.toLocaleDateString('en-GB', { month: 'long', ...(withYear ? { year: 'numeric' } : {}) });
+  if ((months || 1) === 1) return fmt(start, true);
+  return `${fmt(start, start.getFullYear() !== end.getFullYear())} – ${fmt(end, true)}`;
+}

@@ -8,7 +8,7 @@ import { Button, Field, FormError, FormGrid, Input, Modal, Select, Textarea, use
 import { UnitSelect } from '@/components/UnitSelect';
 import { useLookup } from '@/lib/queries';
 import { today } from '@/lib/format';
-import { METHODS, type Account, type Txn, type TxnKind } from './types';
+import { DUES_CATEGORY, METHODS, type Account, type Txn, type TxnKind } from './types';
 
 interface Props { open: boolean; onClose: () => void; kind: TxnKind; txn?: Txn | null; onSaved?: (id: string, submitted: boolean) => void }
 
@@ -37,7 +37,8 @@ export function TransactionForm({ open, onClose, kind, txn, onSaved }: Props) {
     if (!txn && unitAccounts.length && !unitAccounts.some((a) => a.id === f.account)) setF((p) => ({ ...p, account: unitAccounts[0].id }));
   }, [unitAccounts, txn, f.account]);
   const cats = useLookup('finance-categories');
-  const categories = (cats.data || []).filter((c) => c.kind === kind && c.is_active);
+  // Membership dues have their own form (Finance → Monthly dues), which records the member and months paid for.
+  const categories = (cats.data || []).filter((c) => c.kind === kind && c.is_active && (c.code !== DUES_CATEGORY || c.id === txn?.category));
   const members = useQuery({
     queryKey: ['member-pick', unit, memberQuery], enabled: open && kind === 'income' && memberQuery.length >= 2 && online,
     queryFn: () => api<Page<{ id: string; full_name: string; membership_no: string }>>('/members/', { params: { search: memberQuery, org_unit: unit || undefined, page_size: 8 } }).then((p) => p.results),

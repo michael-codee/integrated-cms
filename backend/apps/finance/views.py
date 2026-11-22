@@ -1,6 +1,6 @@
 import datetime
 
-from django.db.models import Prefetch, Sum
+from django.db.models import Prefetch, Q, Sum
 from django.db.models.functions import TruncMonth
 from django.http import HttpResponse
 from django.utils import timezone
@@ -20,6 +20,7 @@ from apps.core import scoping
 from apps.core.exceptions import BusinessRuleError
 from apps.core.exports import Column, ExportMixin
 from apps.core.views import ModulePermission, ScopedModelViewSet, ScopedViewMixin
+from apps.members.models import Member
 from apps.organization.models import OrgUnit
 
 from . import services
@@ -27,7 +28,7 @@ from .filters import BudgetFilter, TransactionFilter
 from .models import Account, ApprovalPolicy, Budget, Reconciliation, Transaction
 from .receipts import render_receipt
 from .serializers import (AccountSerializer, ApprovalPolicySerializer, BudgetSerializer, DecisionSerializer,
-                          ReasonSerializer, ReconciliationSerializer, TransactionListSerializer,
+                          DuesMemberSerializer, ReasonSerializer, ReconciliationSerializer, TransactionListSerializer,
                           TransactionSerializer)
 
 
@@ -311,3 +312,97 @@ class FinanceSummaryView(APIView):
         data = finance_summary(request.user, unit, start, end)
         data["financial_year"] = fy.name if fy else None
         return Response(data)
+
+
+# ---------------------------------------------------------------- monthly membership dues
+
+
+def _dues_members(request, perm):
+    """Members within the user's finance jurisdiction, filtered by unit and search text."""
+    if not scoping.has_perm_anywhere(request.user, perm):
+        raise PermissionDenied("You do not have finance access.")
+    qs = scoping.filter_queryset(Member.objects.select_related("org_unit"), request.user, perm)
+    q = request.query_params
+    if q.get("org_unit"):
+        unit = OrgUnit.objects.filter(pk=q["org_unit"]).first()
+        if unit is None or not scoping.can(request.user, perm, unit):
+            raise PermissionDenied("That unit is outside your jurisdiction.")
+        qs = qs.filter(org_unit__path__startswith=unit.path)
+    term = (q.get("search") or "").strip()
+    for word in term.split()[:4]:
+        qs = qs.filter(Q(first_name__icontains=word) | Q(middle_name__icontains=word) | Q(last_name__icontains=word)
+                       | Q(membership_no__icontains=word) | Q(phone__icontains=word))
+    return qs.order_by("last_name", "first_name", "id")
+
+
+def _int_param(request, name, default, lo, hi):
+    try:
+        value = int(request.query_params.get(name, default))
+    except (TypeError, ValueError) as exc:
+        raise ValidationError({name: "Must be a whole number."}) from exc
+    return min(max(value, lo), hi)
+
+
+class DuesMemberSearchView(APIView):
+    """Member picker for the dues form.
+
+    Treasurers record dues without having access to the full membership
+    register, so this returns only name, number and unit, for members inside
+    the units where the user may record finance entries.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    @extend_schema(responses=DuesMemberSerializer(many=True))
+    def get(self, request):
+        if len((request.query_params.get("search") or "").strip()) < 2:
+            return Response([])
+        qs = _dues_members(request, "finance.create").exclude(status=Member.Status.DECEASED)[:10]
+        return Response(DuesMemberSerializer(qs, many=True).data)
+
+
+class DuesRegisterView(APIView):
+    """Who has paid monthly dues for which months of a year.
+
+    Only approved payments count as paid; payments awaiting approval are
+    reported separately as pending.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    @extend_schema(responses=OpenApiTypes.OBJECT)
+    def get(self, request):
+        year = _int_param(request, "year", timezone.localdate().year, 2000, 2100)
+        page = _int_param(request, "page", 1, 1, 100000)
+        page_size = _int_param(request, "page_size", 50, 1, 200)
+        members = _dues_members(request, "finance.view")
+        status = request.query_params.get("status", "active")
+        if status != "all":
+            members = members.filter(status=status)
+        count = members.count()
+        page_members = list(members[(page - 1) * page_size:page * page_size])
+        rows = services.dues_register(page_members, year)
+        results = []
+        for m in page_members:
+            r = rows[m.pk]
+            results.append({
+                "member": DuesMemberSerializer(m).data,
+                "paid": r["paid"], "pending": r["pending"],
+                "months_paid": sum(1 for v in r["paid"] if v > 0),
+                "total_paid": sum(r["paid"], services.ZERO),
+                "total_pending": sum(r["pending"], services.ZERO),
+                "entries": r["entries"],
+            })
+        # Totals for every member that matches the filters, not only this page.
+        totals = None
+        if count <= 5000:
+            all_rows = services.dues_register(list(members.select_related(None).only("id")), year)
+            paid_by_month = [sum((r["paid"][i] for r in all_rows.values()), services.ZERO) for i in range(12)]
+            totals = {
+                "paid": sum(paid_by_month, services.ZERO),
+                "pending": sum((sum(r["pending"], services.ZERO) for r in all_rows.values()), services.ZERO),
+                "paid_by_month": paid_by_month,
+                "members_paid_by_month": [sum(1 for r in all_rows.values() if r["paid"][i] > 0) for i in range(12)],
+            }
+        return Response({"year": year, "count": count, "page": page, "page_size": page_size,
+                         "results": results, "totals": totals})

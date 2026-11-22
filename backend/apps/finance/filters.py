@@ -14,6 +14,7 @@ class TransactionFilter(django_filters.FilterSet):
     max_amount = django_filters.NumberFilter(field_name="amount", lookup_expr="lte")
     status = django_filters.MultipleChoiceFilter(choices=Transaction.Status.choices)
     is_reversal = django_filters.BooleanFilter(field_name="reversal_of", lookup_expr="isnull", exclude=True)
+    is_dues = django_filters.BooleanFilter(field_name="dues_month", lookup_expr="isnull", exclude=True)
 
     class Meta:
         model = Transaction

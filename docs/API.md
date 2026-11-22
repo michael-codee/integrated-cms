@@ -64,7 +64,7 @@ Approved or locked finance entries cannot be changed through any endpoint; corre
 | Structure | `org-units`, `leadership-positions`, `appointments` |
 | Configuration | `settings`, `currencies`, `financial-years`, `lookups/<category type>` |
 | Membership | `members`, `baptisms`, `member-transfers` |
-| Finance | `finance/accounts`, `finance/transactions`, `finance/approval-policies`, `finance/budgets`, `finance/reconciliations`, `finance/summary` |
+| Finance | `finance/accounts`, `finance/transactions`, `finance/approval-policies`, `finance/budgets`, `finance/reconciliations`, `finance/summary`, `finance/dues/register` (members × months paid for a year), `finance/dues/members` (member picker for the dues form) |
 | Assets | `assets`, `asset-movements`, `asset-maintenance`, `asset-disposals` |
 | Ministry | `departments`, `department-members`, `programs`, `attendance`, `attendance/stats` |
 | Reporting | `report-templates`, `reports`, `reports/compliance`, `reports/due` |

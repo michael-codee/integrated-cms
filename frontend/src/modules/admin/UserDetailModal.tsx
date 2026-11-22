@@ -5,7 +5,7 @@ import { api, ApiError, type Page } from '@/lib/api';
 import { useAuth } from '@/app/AuthContext';
 import type { Assignment } from '@/app/types';
 import { Badge, Button, ConfirmDialog, Field, FormError, FormGrid, Input, Modal, Select, Spinner, StatusBadge, Tabs, Textarea, useToast } from '@/components/ui';
-import { useOrgUnits, UNIT_LABELS } from '@/lib/queries';
+import { useLevelLabels, useOrgUnits } from '@/lib/queries';
 import { date, relative } from '@/lib/format';
 import { passwordProblems } from '../auth/password';
 import type { Role, UserRow } from './types';
@@ -184,11 +184,12 @@ function DetailsTab({ user }: { user: UserRow }) {
   );
 }
 
-function unitOptions(units: ReturnType<typeof useOrgUnits>['data']) {
+function unitOptions(units: ReturnType<typeof useOrgUnits>['data'], UNIT_LABELS: Record<string, string>) {
   return (units || []).map((u) => <option key={u.id} value={u.id}>{'— '.repeat(u.depth)}{u.name} ({UNIT_LABELS[u.unit_type]})</option>);
 }
 
 function AssignmentRow({ a, user, editable }: { a: Assignment; user: UserRow; editable: boolean }) {
+  const UNIT_LABELS = useLevelLabels();
   const { data: roles = [] } = useRoles();
   const { data: units } = useOrgUnits();
   const { level } = useAuth();
@@ -220,7 +221,7 @@ function AssignmentRow({ a, user, editable }: { a: Assignment; user: UserRow; ed
               </Select>
             </Field>
             <Field label="Jurisdiction (where the role applies)">
-              <Select value={draft.org_unit} onChange={(e) => setDraft({ ...draft, org_unit: e.target.value })}>{unitOptions(units)}</Select>
+              <Select value={draft.org_unit} onChange={(e) => setDraft({ ...draft, org_unit: e.target.value })}>{unitOptions(units, UNIT_LABELS)}</Select>
             </Field>
           </div>
           <Field label="Reason" hint="Kept in the audit trail, e.g. “Transferred to Kenema Branch”."><Input value={draft.reason} onChange={(e) => setDraft({ ...draft, reason: e.target.value })} /></Field>
@@ -245,6 +246,7 @@ function AssignmentRow({ a, user, editable }: { a: Assignment; user: UserRow; ed
 }
 
 function RolesTab({ user }: { user: UserRow }) {
+  const UNIT_LABELS = useLevelLabels();
   const { data: roles = [] } = useRoles();
   const { data: units } = useOrgUnits();
   const { level, user: me, can } = useAuth();
@@ -272,7 +274,7 @@ function RolesTab({ user }: { user: UserRow }) {
             </Select>
             <Select value={grant.org_unit} onChange={(e) => setGrant({ ...grant, org_unit: e.target.value })} aria-label="Unit">
               <option value="">at unit…</option>
-              {unitOptions(units)}
+              {unitOptions(units, UNIT_LABELS)}
             </Select>
             <Button icon={<Plus className="h-4 w-4" />} disabled={!grant.role || !grant.org_unit}
               onClick={async () => { if (await run(() => api('/role-assignments/', { method: 'POST', body: { user: user.id, ...grant } }), 'Role granted.')) setGrant({ role: '', org_unit: '' }); }}>Grant</Button>
@@ -296,6 +298,7 @@ function RolesTab({ user }: { user: UserRow }) {
 }
 
 function AccessTab({ user }: { user: UserRow }) {
+  const UNIT_LABELS = useLevelLabels();
   const access = useQuery({ queryKey: ['users', user.id, 'access', user.assignments.map((a) => a.id + a.is_active).join()], queryFn: () => api<Access>(`/users/${user.id}/access/`) });
   const perms = useQuery({ queryKey: ['permissions'], queryFn: () => api<Perm[]>('/permissions/') });
   const modules = useMemo(() => {
@@ -313,7 +316,7 @@ function AccessTab({ user }: { user: UserRow }) {
         <h4 className="mb-1 flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-royal-600" /> What {user.full_name} can do today</h4>
         {access.data?.assignments.length ? (
           <ul className="list-inside list-disc text-sm text-slate-600 dark:text-slate-400">
-            {access.data.assignments.map((a) => <li key={a.assignment}><span className="font-medium text-slate-800 dark:text-slate-200">{a.role}</span> at {a.org_unit} ({UNIT_LABELS[a.org_unit_type as keyof typeof UNIT_LABELS] ?? a.org_unit_type}) and every unit under it</li>)}
+            {access.data.assignments.map((a) => <li key={a.assignment}><span className="font-medium text-slate-800 dark:text-slate-200">{a.role}</span> at {a.org_unit} ({UNIT_LABELS[a.org_unit_type] ?? a.org_unit_type}) and every unit under it</li>)}
           </ul>
         ) : <p className="text-sm text-slate-500">No current roles, so no access to church records.</p>}
         <p className="mt-1 text-xs text-slate-500">To change what a role allows for everyone who holds it, use <span className="font-medium">Administration → Roles & permissions</span>. To change this person's access only, use the Roles & jurisdiction tab.</p>

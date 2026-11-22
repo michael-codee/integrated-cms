@@ -2,7 +2,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from apps.core.files import SignedFilesMixin
-from apps.organization.models import OrgUnit
+from apps.organization.models import OrgUnit, member_level_codes
 
 from .models import BaptismRecord, DiscipleshipClass, DiscipleshipCompletion, Member, MembershipHistory, MemberTransfer
 
@@ -35,7 +35,7 @@ class MemberSerializer(SignedFilesMixin, serializers.ModelSerializer):
         return {"id": str(t.id), "to_unit_name": t.to_unit.name} if t else None
 
     def validate_org_unit(self, unit: OrgUnit):
-        if unit.unit_type not in ("branch", "congregation"):
+        if unit.unit_type not in member_level_codes():
             raise serializers.ValidationError("Choose a branch or congregation.")
         if unit.status != "active" and (not self.instance or self.instance.org_unit_id != unit.pk):
             raise serializers.ValidationError("This branch is not active.")

@@ -24,7 +24,9 @@ class ReportTemplateSerializer(serializers.ModelSerializer):
         return value
 
     def validate_unit_types(self, value):
-        allowed = {"headquarters", "region", "district", "branch", "congregation"}
+        from apps.organization.models import StructureLevel
+
+        allowed = set(StructureLevel.objects.values_list("code", flat=True))
         if not value or not set(value) <= allowed:
             raise serializers.ValidationError(f"Choose from: {', '.join(sorted(allowed))}.")
         return value

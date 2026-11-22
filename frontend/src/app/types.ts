@@ -31,7 +31,8 @@ export interface OrgUnit {
   id: string;
   code: string;
   name: string;
-  unit_type: 'headquarters' | 'region' | 'district' | 'branch' | 'congregation';
+  /** Code of a StructureLevel defined by the administrator (headquarters, region, district, branch…). */
+  unit_type: string;
   unit_type_display?: string;
   parent: string | null;
   parent_name?: string | null;
@@ -64,4 +65,19 @@ export interface Lookup {
   sort_order: number;
   kind?: 'income' | 'expense';
   [k: string]: unknown;
+}
+
+export interface StructureLevel {
+  id: string;
+  code: string;
+  name: string;
+  plural_name: string;
+  rank: number;
+  code_prefix: string;
+  holds_members: boolean;
+  icon: string;
+  description: string;
+  is_active: boolean;
+  is_system: boolean;
+  unit_count: number;
 }

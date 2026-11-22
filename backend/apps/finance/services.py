@@ -16,7 +16,7 @@ from apps.configuration.models import FinancialYear, SystemSetting
 from apps.core import scoping
 from apps.core.events import publish
 from apps.core.exceptions import BusinessRuleError
-from apps.organization.models import UNIT_RANK
+from apps.organization.models import StructureLevel
 
 from .models import (ApprovalLevel, ApprovalPolicy, Budget, Transaction, TransactionApproval, next_reference)
 
@@ -113,7 +113,8 @@ def approver_unit(org_unit, level):
     """The unit at which an approver must hold the approve permission."""
     if level == ApprovalLevel.SAME_UNIT:
         return org_unit
-    if UNIT_RANK[org_unit.unit_type] <= UNIT_RANK[level]:
+    ranks = dict(StructureLevel.objects.filter(code__in=[org_unit.unit_type, level]).values_list("code", "rank"))
+    if level in ranks and org_unit.unit_type in ranks and ranks[org_unit.unit_type] <= ranks[level]:
         return org_unit  # the unit itself is at or above that level
     return org_unit.ancestor_of_type(level) or org_unit
 

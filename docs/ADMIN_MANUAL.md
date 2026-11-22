@@ -44,7 +44,13 @@ When someone leaves a post, end their assignment (or suspend the account) the sa
 
 ## 3. Church structure
 
-*Church structure*: add regions, districts, branches and congregations; record addresses and map coordinates; move a unit under a different parent (its whole subtree moves and access follows automatically); deactivate units that close (history is kept). Units marked *planned* (e.g. Makeni) can be activated when they open.
+*Church structure*: add regions, districts, branches and congregations; record addresses and map coordinates; move a unit under a different parent (its whole subtree moves and access follows automatically). Units marked *planned* (e.g. Makeni) can be activated when they open.
+
+**Structure levels** (*Church structure → Structure levels*, needs `settings.edit`). The levels of the hierarchy are yours to define. The system starts with Headquarters › Region › District › Branch › Congregation; you can rename any level, add new ones (for example a *Zone* between District and Branch, or an *Outstation* below Branch), choose where each sits, the prefix for generated unit codes, and whether members are registered at that level. A unit can only be placed under a unit of a higher level. Headquarters and Branch are system levels: they can be renamed but not removed. A level that has units cannot be removed; untick *In use* to stop new units being added at it. Moving a level is refused if it would put existing units under a lower level.
+
+**Adding and removing branches.** Add a branch with *Add unit* or *Add branch* on its district. To take a branch off the structure:
+- **Close** (needs `org.edit`) marks it inactive, with an optional reason. Its members, finances and history are kept and stay in reports; it can no longer receive new members. *Reopen* reverses this.
+- **Remove** (needs `org.delete`, System Administrator / General Overseer by default) is only for a unit added by mistake. If anything still belongs to the unit (members, transactions, assets, attendance, user access, units below it…) the system lists those records and offers to close it instead. A removed unit is soft-deleted and recorded in its history and the audit trail. Headquarters can be neither closed nor removed.
 
 ## 4. System settings
 

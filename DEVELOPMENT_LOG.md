@@ -226,3 +226,17 @@ known limitations, phase by phase.
 **Not verified here:** a real Vercel deployment and a real Supabase project (no access from this environment). The first real deploy is the remaining check.
 
 **Known limitations:** uploads limited to 4 MB by Vercel; Supabase daily backups cover the database only, so buckets must be copied separately; cold start of a few seconds after idle periods.
+
+---
+
+## Admin-defined church structure and branch removal  ✅
+
+**Completed**
+
+- `StructureLevel` model: the levels of the hierarchy (name, plural, position, unit-code prefix, icon, whether members register there, in use). The five original levels are installed by migration, so existing units keep working. Headquarters (root) and Branch are system levels: renamable, not removable.
+- `OrgUnit.unit_type` and `LeadershipPosition.unit_type` now hold a level code instead of a fixed choice; placement rules, code generation, member/transfer checks, finance approval routing, report templates, the branch directory and the dashboard read the levels instead of hard-coded lists.
+- API `/api/structure-levels/` (read: anyone signed in; change: `settings.edit`). Moving a level is refused if existing units would end up under a lower level; a level with units cannot be deleted, only taken out of use.
+- `GET /api/org-units/{id}/dependencies/` lists what still belongs to a unit. `DELETE` only removes (soft-deletes) a unit with nothing attached and returns 409 `unit_in_use` otherwise; it records a `removed` history event. Headquarters can be neither closed nor removed. The unit delete previously always returned 403; it now works for `org.delete` holders.
+- UI: *Church structure → Structure levels* tab; counts and "Add <level>" follow the defined levels; *Close* (with reason) / *Reopen*; *Remove* dialog that lists attached records and offers to close instead.
+
+**Verified:** 169 backend tests (17 new), type check, unit tests and production build; flows checked in a browser.

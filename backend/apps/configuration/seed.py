@@ -9,7 +9,7 @@ from django.db import transaction
 
 from apps.accounts.models import Permission, Role
 from apps.accounts.registry import DEFAULT_ROLES, MODULES, expand
-from apps.organization.models import OrgUnit, UnitType
+from apps.organization.models import OrgUnit, UnitType, seed_levels
 
 from .models import (AssetCategory, Currency, DocumentCategory, FinanceCategory, MembershipCategory,
                      ProgramCategory, ServiceType, SystemSetting)
@@ -194,6 +194,7 @@ def _seed_unit(spec, parent=None):
 
 
 def seed_structure():
+    seed_levels()
     if OrgUnit.all_objects.filter(unit_type=UnitType.HEADQUARTERS).exclude(code=ORG_STRUCTURE["code"]).exists():
         return  # the administrator has already reorganised the structure; never overwrite it
     _seed_unit(ORG_STRUCTURE)

@@ -1,4 +1,4 @@
-from django.db.models import Prefetch, Q
+from django.db.models import Exists, OuterRef, Prefetch, Q, Subquery
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
@@ -12,10 +12,12 @@ from apps.core.views import ScopedModelViewSet, ScopedViewMixin
 from apps.organization.models import OrgUnit
 
 from . import services
-from .filters import MemberFilter, WithinUnitFilter
-from .models import BaptismRecord, Member, MemberTransfer
-from .serializers import (BaptismSerializer, DecisionSerializer, MemberListSerializer, MemberSerializer,
-                          MembershipHistorySerializer, StatusChangeSerializer, TransferSerializer)
+from .filters import DiscipleshipRegisterFilter, MemberFilter, WithinUnitFilter
+from .models import BaptismRecord, DiscipleshipClass, DiscipleshipCompletion, Member, MemberTransfer
+from .serializers import (DISCIPLESHIP_CLASSES, BaptismSerializer, DecisionSerializer, DiscipleshipCompletionSerializer,
+                          DiscipleshipRegisterSerializer, MemberListSerializer, MemberSerializer,
+                          MembershipHistorySerializer, RemoveCompletionSerializer, StatusChangeSerializer,
+                          TransferSerializer)
 from .stats import scoped_member_stats
 
 
@@ -29,7 +31,7 @@ class MemberViewSet(ExportMixin, ScopedModelViewSet):
     ordering_fields = ["last_name", "first_name", "joined_on", "membership_no", "created_at", "date_of_birth"]
     parser_classes = [JSONParser, MultiPartParser, FormParser]
     action_permissions = {"history": "view", "stats": "view", "set_status": "edit", "baptize": "edit",
-                          "check_duplicates": "view", "export": None}
+                          "discipleship": "edit", "check_duplicates": "view", "export": None}
     export_title = "Membership register"
     export_columns = [
         Column("membership_no", "Membership No.", 16),
@@ -104,6 +106,21 @@ class MemberViewSet(ExportMixin, ScopedModelViewSet):
                                       certificate_no=data.get("certificate_no", ""), notes=data.get("notes", ""),
                                       record_id=data.get("id"))
         return Response(BaptismSerializer(rec).data, status=201)
+
+    @extend_schema(request=DiscipleshipCompletionSerializer, responses=DiscipleshipCompletionSerializer)
+    @action(detail=True, methods=["post"])
+    def discipleship(self, request, pk=None):
+        """Record that the member completed one of the three discipleship classes."""
+        member = self.get_object()
+        self.require("edit", member.org_unit)
+        s = DiscipleshipCompletionSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        data = s.validated_data
+        rec = services.record_class_completion(
+            member, request.user, course=data["course"], completed_on=data["completed_on"],
+            facilitator=data.get("facilitator", ""), certificate_no=data.get("certificate_no", ""),
+            notes=data.get("notes", ""), record_id=data.get("id"))
+        return Response(DiscipleshipCompletionSerializer(rec).data, status=201)
 
     @action(detail=False, methods=["get"], url_path="check-duplicates")
     def check_duplicates(self, request):
@@ -202,3 +219,88 @@ class TransferViewSet(ScopedViewMixin, mixins.ListModelMixin, mixins.RetrieveMod
             raise PermissionDenied("Only the sending branch can cancel this transfer.")
         services.cancel_transfer(transfer, request.user)
         return Response(self.get_serializer(transfer).data)
+
+
+def _completed_on(course):
+    return Subquery(DiscipleshipCompletion.objects.filter(member=OuterRef("pk"), course=course)
+                    .values("completed_on")[:1])
+
+
+class DiscipleshipRegisterViewSet(ExportMixin, ScopedViewMixin, mixins.ListModelMixin, viewsets.GenericViewSet):
+    """The discipleship register: every member in the user's jurisdiction with the date each of the three
+    classes was completed, and whether the badge of discipleship has been earned."""
+
+    module = "members"
+    serializer_class = DiscipleshipRegisterSerializer
+    queryset = Member.objects.select_related("org_unit")
+    filterset_class = DiscipleshipRegisterFilter
+    search_fields = ["first_name", "middle_name", "last_name", "membership_no"]
+    ordering_fields = ["last_name", "first_name", "membership_no", "discipleship_badge_on", "foundation_on",
+                       "discipleship_on", "spiritual_growth_on"]
+    export_title = "Discipleship register"
+    export_columns = [
+        Column("membership_no", "Membership No.", 16),
+        Column("full_name", "Full name", 26),
+        Column("org_unit.name", "Branch", 22),
+        Column("foundation_on", "Foundation Class", 14),
+        Column("discipleship_on", "Discipleship Class", 14),
+        Column("spiritual_growth_on", "Spiritual Growth Class", 14),
+        Column("discipleship_badge_on", "Badge of discipleship", 14,
+               getter=lambda m: f"Awarded {m.discipleship_badge_on}" if m.discipleship_badge_on else ""),
+    ]
+
+    def get_queryset(self):
+        return self.scope(super().get_queryset()).annotate(
+            foundation_on=_completed_on(DiscipleshipClass.FOUNDATION),
+            discipleship_on=_completed_on(DiscipleshipClass.DISCIPLESHIP),
+            spiritual_growth_on=_completed_on(DiscipleshipClass.SPIRITUAL_GROWTH),
+        )
+
+    def get_export_summary(self, queryset):
+        total = queryset.count()
+        started = queryset.filter(Exists(DiscipleshipCompletion.objects.filter(member=OuterRef("pk")))).count()
+        badge = queryset.filter(discipleship_badge_on__isnull=False).count()
+        return [("Members", f"{total:,}"), ("Started the classes", f"{started:,}"),
+                ("Badge of discipleship", f"{badge:,}")]
+
+    @action(detail=False)
+    def summary(self, request):
+        qs = self.filter_queryset(self.get_queryset())
+        by_class = {c: 0 for c in DiscipleshipClass.values}
+        completions = DiscipleshipCompletion.objects.filter(member__in=qs.values("pk"))
+        for course in by_class:
+            by_class[course] = completions.filter(course=course).count()
+        return Response({
+            "members": qs.count(),
+            "started": qs.filter(Exists(DiscipleshipCompletion.objects.filter(member=OuterRef("pk")))).count(),
+            "badges": qs.filter(discipleship_badge_on__isnull=False).count(),
+            "by_class": [{"value": c["value"], "label": c["label"], "count": by_class[c["value"]]}
+                         for c in DISCIPLESHIP_CLASSES],
+        })
+
+
+class DiscipleshipCompletionViewSet(ScopedViewMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin,
+                                    viewsets.GenericViewSet):
+    """Individual class completions (shown on a member's Discipleship tab). Recorded through
+    ``POST /members/{id}/discipleship/``; a mistaken entry is removed with ``POST …/remove/``."""
+
+    module = "members"
+    serializer_class = DiscipleshipCompletionSerializer
+    queryset = DiscipleshipCompletion.objects.select_related("member", "org_unit", "created_by")
+    filterset_fields = {"member": ["exact"], "course": ["exact"], "completed_on": ["gte", "lte"]}
+    action_permissions = {"remove": "edit"}
+
+    def get_queryset(self):
+        # Completions follow the member: scope by the member's current branch so the record
+        # travels with them after a transfer.
+        return super().get_queryset().filter(member__in=self.scope(Member.objects.all()).values("pk"))
+
+    @extend_schema(request=RemoveCompletionSerializer, responses=None)
+    @action(detail=True, methods=["post"])
+    def remove(self, request, pk=None):
+        rec = self.get_object()
+        self.require("edit", rec.member.org_unit)
+        s = RemoveCompletionSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        services.remove_class_completion(rec, request.user, s.validated_data["reason"])
+        return Response(status=204)

@@ -13,6 +13,7 @@ import { date } from '@/lib/format';
 import { cacheRecords, localRecords } from '@/offline/repository';
 import { MemberForm } from './MemberForm';
 import { MemberAnalytics } from './MemberAnalytics';
+import { DiscipleshipBadge } from './Discipleship';
 import type { Member } from './types';
 
 const FILTER_KEYS = ['search', 'org_unit', 'status', 'gender', 'category', 'baptism_status', 'age_group'] as const;
@@ -73,7 +74,7 @@ export default function MembersPage() {
           </span>
         )}
         <div className="min-w-0">
-          <p className="truncate font-medium text-slate-900 dark:text-white">{m.full_name}</p>
+          <p className="flex items-center gap-1.5 truncate font-medium text-slate-900 dark:text-white">{m.full_name} <DiscipleshipBadge on={m.discipleship_badge_on} compact /></p>
           <p className="flex items-center gap-1.5 text-xs text-slate-500">{m.membership_no || 'number pending'} {m.is_demo && <Badge>demo</Badge>} <SyncBadge state={m._sync} /></p>
         </div>
       </div>

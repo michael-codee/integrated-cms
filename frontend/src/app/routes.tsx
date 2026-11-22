@@ -13,6 +13,7 @@ const StructurePage = lazy(() => import('@/modules/structure/StructurePage'));
 const MembersPage = lazy(() => import('@/modules/members/MembersPage'));
 const MemberDetailPage = lazy(() => import('@/modules/members/MemberDetailPage'));
 const TransfersPage = lazy(() => import('@/modules/members/TransfersPage'));
+const DiscipleshipPage = lazy(() => import('@/modules/members/DiscipleshipPage'));
 const FinanceOverviewPage = lazy(() => import('@/modules/finance/FinanceOverviewPage'));
 const TransactionsPage = lazy(() => import('@/modules/finance/TransactionsPage'));
 const TransactionDetailPage = lazy(() => import('@/modules/finance/TransactionDetailPage'));
@@ -64,6 +65,7 @@ export const router = createBrowserRouter([
       { path: 'structure', element: guarded('org.view', <StructurePage />) },
       { path: 'members', element: guarded('members.view', <MembersPage />) },
       { path: 'members/transfers', element: guarded('members.view', <TransfersPage />) },
+      { path: 'members/discipleship', element: guarded('members.view', <DiscipleshipPage />) },
       { path: 'members/:id', element: guarded('members.view', <MemberDetailPage />) },
       { path: 'finance', element: guarded('finance.view', <FinanceOverviewPage />) },
       { path: 'finance/transactions', element: guarded('finance.view', <TransactionsPage />) },

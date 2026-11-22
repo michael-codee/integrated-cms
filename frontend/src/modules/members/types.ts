@@ -33,6 +33,8 @@ export interface Member {
   is_demo: boolean;
   version: number;
   pending_transfer: { id: string; to_unit_name: string } | null;
+  /** Date the badge of discipleship was earned; null until all three classes are completed. */
+  discipleship_badge_on: string | null;
   _sync?: string;
 }
 
@@ -52,4 +54,29 @@ export interface MemberStats {
   by_district: { id: string; name: string; count: number }[]; by_region: { id: string; name: string; count: number }[];
   growth: { month: string; new: number; exits: number; total: number }[];
   baptisms_by_month: { month: string; count: number }[];
+}
+
+export type DiscipleshipCourse = 'foundation' | 'discipleship' | 'spiritual_growth';
+
+/** The three classes of the discipleship pathway, in the order they are normally taken. */
+export const DISCIPLESHIP_CLASSES: { value: DiscipleshipCourse; label: string; field: 'foundation_on' | 'discipleship_on' | 'spiritual_growth_on' }[] = [
+  { value: 'foundation', label: 'Foundation Class', field: 'foundation_on' },
+  { value: 'discipleship', label: 'Discipleship Class', field: 'discipleship_on' },
+  { value: 'spiritual_growth', label: 'Spiritual Growth Class', field: 'spiritual_growth_on' },
+];
+
+export interface DiscipleshipCompletion {
+  id: string; member: string; member_name: string; membership_no: string | null; course: DiscipleshipCourse; course_name: string;
+  completed_on: string; facilitator: string; certificate_no: string; notes: string; org_unit_name: string; recorded_by: string | null;
+  created_at: string; version: number;
+}
+
+export interface DiscipleshipRow {
+  id: string; membership_no: string | null; full_name: string; gender: string; org_unit: string; org_unit_name: string; status: string;
+  foundation_on: string | null; discipleship_on: string | null; spiritual_growth_on: string | null; classes_completed: number;
+  discipleship_badge_on: string | null; is_demo: boolean;
+}
+
+export interface DiscipleshipSummary {
+  members: number; started: number; badges: number; by_class: { value: DiscipleshipCourse; label: string; count: number }[];
 }

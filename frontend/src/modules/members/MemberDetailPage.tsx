@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
-import { ArrowRightLeft, Droplets, Pencil, UserCog } from 'lucide-react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { ArrowRightLeft, Award, CheckCircle2, Circle, Droplets, GraduationCap, Pencil, Trash2, UserCog } from 'lucide-react';
 import { api, ApiError, OfflineError } from '@/lib/api';
 import { db } from '@/offline/db';
 import { submitChange } from '@/offline/repository';
@@ -11,7 +11,8 @@ import { Badge, Button, Card, CardBody, ConfirmDialog, DescriptionList, EmptySta
 import { SyncBadge } from '@/components/SyncBadge';
 import { date, dateTime, titleCase, today } from '@/lib/format';
 import { MemberForm } from './MemberForm';
-import type { Member, Transfer } from './types';
+import { ClassCompletionModal, DiscipleshipBadge } from './Discipleship';
+import { DISCIPLESHIP_CLASSES, type DiscipleshipCompletion, type DiscipleshipCourse, type Member, type Transfer } from './types';
 
 interface HistoryRow { id: string; event: string; changes: Record<string, unknown>; effective_date: string; org_unit_name: string; note: string; by: string | null; created_at: string }
 interface Baptism { id: string; date: string; location: string; officiated_by: string; certificate_no: string; org_unit_name: string }
@@ -141,11 +142,81 @@ function StatusModal({ member, open, onClose }: { member: Member; open: boolean;
   );
 }
 
+function DiscipleshipTab({ member, editable, onRecord }: { member: Member; editable: boolean; onRecord: (c: DiscipleshipCourse) => void }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [removing, setRemoving] = useState<DiscipleshipCompletion | null>(null);
+  const [reason, setReason] = useState('');
+  const { data, isLoading } = useQuery({
+    queryKey: ['discipleship', 'member', member.id],
+    queryFn: () => api<{ results: DiscipleshipCompletion[] }>('/discipleship-completions/', { params: { member: member.id } }),
+  });
+  if (isLoading) return <PageLoader />;
+  const byCourse = new Map((data?.results ?? []).map((c) => [c.course, c]));
+  const remove = async () => {
+    if (!removing) return;
+    try {
+      await api(`/discipleship-completions/${removing.id}/remove/`, { method: 'POST', body: { reason } });
+      toast.success(`${removing.course_name} removed.`);
+      qc.invalidateQueries({ queryKey: ['members'] });
+      qc.invalidateQueries({ queryKey: ['discipleship'] });
+    } catch (e) { toast.error((e as Error).message); }
+    setRemoving(null); setReason('');
+  };
+  return (
+    <div className="space-y-4">
+      {member.discipleship_badge_on ? (
+        <div className="flex items-center gap-3 rounded-xl border border-gold-300 bg-gold-50 px-4 py-3 text-sm text-gold-900 dark:border-gold-700 dark:bg-gold-900/30 dark:text-gold-100">
+          <Award className="h-8 w-8 shrink-0 text-gold-600 dark:text-gold-300" />
+          <div><p className="font-semibold">Badge of discipleship</p><p className="text-xs">Awarded {date(member.discipleship_badge_on)} for completing all three classes.</p></div>
+        </div>
+      ) : (
+        <p className="text-sm text-slate-600 dark:text-slate-400">{byCourse.size} of 3 classes completed. The badge of discipleship is awarded automatically when all three are recorded.</p>
+      )}
+      <ol className="grid gap-3 sm:grid-cols-3">
+        {DISCIPLESHIP_CLASSES.map((c, i) => {
+          const done = byCourse.get(c.value);
+          return (
+            <li key={c.value} className={`rounded-xl border p-4 ${done ? 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-800 dark:bg-emerald-950/30' : 'border-slate-200 dark:border-slate-700'}`}>
+              <p className="flex items-center gap-2 text-sm font-semibold">
+                {done ? <CheckCircle2 className="h-5 w-5 text-emerald-600" /> : <Circle className="h-5 w-5 text-slate-300" />}
+                <span className="text-xs font-normal text-slate-500">{i + 1}.</span> {c.label}
+              </p>
+              {done ? (
+                <div className="mt-2 space-y-0.5 text-xs text-slate-600 dark:text-slate-400">
+                  <p>Completed <b>{date(done.completed_on)}</b> · {done.org_unit_name}</p>
+                  {done.facilitator && <p>Facilitator: {done.facilitator}</p>}
+                  {done.certificate_no && <p>Certificate: {done.certificate_no}</p>}
+                  {done.notes && <p className="italic">{done.notes}</p>}
+                  {done.recorded_by && <p>Recorded by {done.recorded_by}</p>}
+                  {editable && <Button size="sm" variant="ghost" className="mt-1 -ml-2" icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setRemoving(done)}>Remove</Button>}
+                </div>
+              ) : (
+                <div className="mt-2">
+                  <p className="text-xs text-slate-500">Not yet completed.</p>
+                  {editable && <Button size="sm" variant="secondary" className="mt-2" onClick={() => onRecord(c.value)}>Record completion</Button>}
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      <ConfirmDialog open={!!removing} onClose={() => setRemoving(null)} onConfirm={remove} tone="danger" confirmLabel="Remove"
+        title={`Remove ${removing?.course_name ?? 'class'}?`}
+        message={member.discipleship_badge_on ? 'Use this only to correct a mistake. The badge of discipleship will be withdrawn until the class is recorded again.' : 'Use this only to correct a mistake.'}>
+        <Field label="Reason"><Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} /></Field>
+      </ConfirmDialog>
+    </div>
+  );
+}
+
 export default function MemberDetailPage() {
   const { id = '' } = useParams();
   const { can } = useAuth();
-  const [tab, setTab] = useState('profile');
-  const [modal, setModal] = useState<'edit' | 'baptism' | 'transfer' | 'status' | null>(null);
+  const [params] = useSearchParams();
+  const [tab, setTab] = useState(params.get('tab') || 'profile');
+  const [modal, setModal] = useState<'edit' | 'baptism' | 'transfer' | 'status' | 'discipleship' | null>(null);
+  const [course, setCourse] = useState<DiscipleshipCourse | undefined>();
   const [cancelling, setCancelling] = useState(false);
   const qc = useQueryClient();
   const toast = useToast();
@@ -165,10 +236,11 @@ export default function MemberDetailPage() {
           {m.photo ? <img src={m.photo} alt="" className="h-12 w-12 rounded-full object-cover ring-2 ring-gold-400" /> : <span className="flex h-12 w-12 items-center justify-center rounded-full bg-royal-700 text-base font-semibold text-white ring-2 ring-gold-400">{m.first_name?.[0]}{m.last_name?.[0]}</span>}
           <span>{m.full_name}</span>
         </span>}
-        subtitle={<span className="flex flex-wrap items-center gap-2">{m.membership_no || 'Membership number assigned on sync'} · {m.org_unit_name} <StatusBadge status={m.status} /> {m.is_demo && <Badge>demo record</Badge>} <SyncBadge state={m._sync} /></span>}
+        subtitle={<span className="flex flex-wrap items-center gap-2">{m.membership_no || 'Membership number assigned on sync'} · {m.org_unit_name} <StatusBadge status={m.status} /> <DiscipleshipBadge on={m.discipleship_badge_on} /> {m.is_demo && <Badge>demo record</Badge>} <SyncBadge state={m._sync} /></span>}
         actions={editable && <>
           <Button variant="secondary" icon={<Pencil className="h-4 w-4" />} onClick={() => setModal('edit')}>Edit</Button>
           {m.baptism_status !== 'baptized' && <Button variant="secondary" icon={<Droplets className="h-4 w-4" />} onClick={() => setModal('baptism')}>Record baptism</Button>}
+          {!m.discipleship_badge_on && <Button variant="secondary" icon={<GraduationCap className="h-4 w-4" />} onClick={() => { setCourse(undefined); setModal('discipleship'); }}>Record class</Button>}
           {m.status === 'active' && !m.pending_transfer && <Button variant="secondary" icon={<ArrowRightLeft className="h-4 w-4" />} onClick={() => setModal('transfer')}>Transfer</Button>}
           <Button variant="secondary" icon={<UserCog className="h-4 w-4" />} onClick={() => setModal('status')}>Status</Button>
         </>} />
@@ -178,7 +250,7 @@ export default function MemberDetailPage() {
           {editable && <Button size="sm" variant="ghost" onClick={() => setCancelling(true)}>Cancel transfer</Button>}
         </div>
       )}
-      <Tabs value={tab} onChange={setTab} tabs={[{ value: 'profile', label: 'Profile' }, { value: 'history', label: 'Membership history' }, { value: 'baptisms', label: 'Baptism' }, { value: 'transfers', label: 'Transfers' }]} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ value: 'profile', label: 'Profile' }, { value: 'history', label: 'Membership history' },  { value: 'baptisms', label: 'Baptism' }, { value: 'discipleship', label: 'Discipleship' }, { value: 'transfers', label: 'Transfers' }]} />
       <Card>
         <CardBody>
           {tab === 'profile' && (
@@ -194,6 +266,7 @@ export default function MemberDetailPage() {
               { label: 'Date joined', value: date(m.joined_on) },
               { label: 'Category', value: m.category_name || '—' },
               { label: 'Baptism', value: m.baptism_status === 'baptized' ? `Baptized ${date(m.baptism_date)}${m.baptism_location ? `, ${m.baptism_location}` : ''}` : 'Not baptized' },
+              { label: 'Discipleship', value: m.discipleship_badge_on ? <DiscipleshipBadge on={m.discipleship_badge_on} /> : 'Badge not yet earned' },
               { label: 'Previous affiliation', value: m.previous_affiliation || '—' },
               { label: 'Emergency contact', value: m.emergency_contact_name ? `${m.emergency_contact_name} ${m.emergency_contact_phone}` : '—' },
               { label: 'Photograph consent', value: m.photo_consent ? 'Given' : 'Not given' },
@@ -219,6 +292,7 @@ export default function MemberDetailPage() {
           {tab === 'baptisms' && (baptisms.data?.results.length ? (
             <ul className="divide-y divide-slate-100 dark:divide-slate-800">{baptisms.data.results.map((b) => <li key={b.id} className="py-2 text-sm"><b>{date(b.date)}</b> · {b.location || b.org_unit_name}{b.officiated_by ? ` · officiated by ${b.officiated_by}` : ''}{b.certificate_no ? ` · cert. ${b.certificate_no}` : ''}</li>)}</ul>
           ) : <EmptyState title="No baptism recorded" />)}
+          {tab === 'discipleship' && <DiscipleshipTab member={m} editable={editable} onRecord={(c) => { setCourse(c); setModal('discipleship'); }} />}
           {tab === 'transfers' && (transfers.data?.results.length ? (
             <ul className="divide-y divide-slate-100 dark:divide-slate-800">{transfers.data.results.map((t) => <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"><span>{t.from_unit_name} → <b>{t.to_unit_name}</b> · {date(t.effective_date)}{t.reason ? ` · ${t.reason}` : ''}</span><StatusBadge status={t.status} /></li>)}</ul>
           ) : <EmptyState title="No transfers" />)}
@@ -226,10 +300,24 @@ export default function MemberDetailPage() {
       </Card>
       <MemberForm open={modal === 'edit'} onClose={() => setModal(null)} member={m} />
       {modal === 'baptism' && <BaptismModal open member={m} onClose={() => setModal(null)} />}
+      {modal === 'discipleship' && <DiscipleshipModalLoader member={m} initial={course} onClose={() => setModal(null)} />}
       {modal === 'transfer' && <TransferModal open member={m} onClose={() => setModal(null)} />}
       {modal === 'status' && <StatusModal open member={m} onClose={() => setModal(null)} />}
       <ConfirmDialog open={cancelling} onClose={() => setCancelling(false)} title="Cancel this transfer?" message="The member stays at their current branch." tone="danger" confirmLabel="Cancel transfer"
         onConfirm={async () => { try { await api(`/member-transfers/${m.pending_transfer!.id}/cancel/`, { method: 'POST' }); qc.invalidateQueries({ queryKey: ['members'] }); toast.success('Transfer cancelled.'); } catch (e) { toast.error((e as Error).message); } setCancelling(false); }} />
     </div>
   );
+}
+
+/** Loads which classes are already recorded so the modal only offers the outstanding ones. */
+function DiscipleshipModalLoader({ member, initial, onClose }: { member: Member; initial?: DiscipleshipCourse; onClose: () => void }) {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['discipleship', 'member', member.id],
+    queryFn: () => api<{ results: DiscipleshipCompletion[] }>('/discipleship-completions/', { params: { member: member.id } }),
+    retry: false,
+  });
+  if (isLoading) return null;
+  // Offline: offer every class; the server rejects a duplicate when the change syncs.
+  const done = isError ? [] : (data?.results ?? []).map((c) => c.course);
+  return <ClassCompletionModal open member={member} initial={initial} done={done} onClose={onClose} />;
 }

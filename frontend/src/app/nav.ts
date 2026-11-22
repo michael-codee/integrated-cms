@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { ArrowRightLeft, Bell, FileBarChart, FolderOpen, RefreshCcw, Boxes, CalendarCheck, CalendarDays, HandHeart, Megaphone, Building2, ClipboardCheck, KeyRound, Landmark, LayoutDashboard, ListChecks, PiggyBank, Receipt, ScrollText, Settings, ShieldCheck, UserRoundCheck, Users } from 'lucide-react';
+import { ArrowRightLeft, Bell, FileBarChart, FolderOpen, HandCoins, RefreshCcw, Boxes, CalendarCheck, CalendarDays, HandHeart, Megaphone, Building2, ClipboardCheck, KeyRound, Landmark, LayoutDashboard, ListChecks, PiggyBank, Receipt, ScrollText, Settings, ShieldCheck, UserRoundCheck, Users } from 'lucide-react';
 
 export interface NavItem {
   to: string;
@@ -48,6 +48,7 @@ export const NAV: NavGroup[] = [
     items: [
       { to: '/finance', label: 'Finance overview', icon: Landmark, perm: 'finance.view' },
       { to: '/finance/transactions', label: 'Transactions', icon: Receipt, perm: 'finance.view' },
+      { to: '/finance/dues', label: 'Monthly dues', icon: HandCoins, perm: 'finance.view' },
       { to: '/finance/approvals', label: 'Approvals', icon: ClipboardCheck, perm: ['finance.approve', 'budgets.approve'] },
       { to: '/finance/budgets', label: 'Budgets', icon: PiggyBank, perm: 'budgets.view' },
       { to: '/finance/accounts', label: 'Accounts', icon: ListChecks, perm: 'finance.view' },

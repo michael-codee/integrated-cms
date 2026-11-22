@@ -8,7 +8,7 @@ import { Badge, Button, Card, CardBody, CardHeader, Checkbox, ConfirmDialog, Des
 import { date, dateTime, money } from '@/lib/format';
 import { TransactionForm } from './TransactionForm';
 import { KindBadge, TxnStatus } from './shared';
-import { METHODS, type Txn } from './types';
+import { duesPeriodLabel, METHODS, type Txn } from './types';
 
 type Dialog = null | 'approve' | 'reject' | 'reverse' | 'delete' | 'submit';
 
@@ -78,6 +78,7 @@ export default function TransactionDetailPage() {
                 { label: 'Account', value: t.account_name },
                 { label: 'Payment method', value: METHODS.find(([v]) => v === t.method)?.[1] },
                 { label: t.kind === 'income' ? 'Received from' : 'Paid to', value: t.party || '—' },
+                ...(t.dues_month ? [{ label: 'Dues paid for', value: duesPeriodLabel(t.dues_month, t.dues_months) }] : []),
                 { label: 'Member', value: t.member ? <Link className="text-royal-700 underline" to={`/members/${t.member}`}>{t.member_name} ({t.member_no})</Link> : '—' },
                 { label: 'External reference', value: t.external_ref || '—' },
                 { label: 'Program / project', value: t.program_ref || '—' },

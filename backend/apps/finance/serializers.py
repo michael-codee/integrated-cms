@@ -125,7 +125,7 @@ class TransactionSerializer(SignedFilesMixin, ClientIdMixin, serializers.ModelSe
                   "external_ref", "attachment", "status", "required_steps", "current_step", "next_step",
                   "submitted_at", "submitted_by_name", "approved_at", "created_by_name", "created_at",
                   "reversal_of", "reversal_of_reference", "reversed_by", "approvals", "can_approve", "version",
-                  "sync_state", "is_demo", "client_created_at"]
+                  "sync_state", "is_demo", "client_created_at", "dues_month", "dues_months"]
         read_only_fields = ["reference", "financial_year", "status", "required_steps", "current_step", "submitted_at",
                             "approved_at", "created_at", "reversal_of", "version", "is_demo"]
         extra_kwargs = {"currency": {"required": False}, "org_unit": {"required": False}}
@@ -164,6 +164,8 @@ class TransactionSerializer(SignedFilesMixin, ClientIdMixin, serializers.ModelSe
                                      if self.instance else {}), **attrs})
         services.validate_entry(candidate, self.context["request"].user)
         attrs["financial_year"] = candidate.financial_year
+        if candidate.dues_month:
+            attrs["dues_month"], attrs["dues_months"] = candidate.dues_month, candidate.dues_months
         return attrs
 
 
@@ -177,7 +179,18 @@ class TransactionListSerializer(serializers.ModelSerializer):
         model = Transaction
         fields = ["id", "reference", "kind", "org_unit", "org_unit_name", "account_name", "category",
                   "category_name", "amount", "currency", "transaction_date", "party", "member_name", "status",
-                  "current_step", "required_steps", "reversal_of", "version", "is_demo"]
+                  "current_step", "required_steps", "reversal_of", "version", "is_demo", "dues_month",
+                  "dues_months"]
+
+
+class DuesMemberSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    full_name = serializers.CharField()
+    membership_no = serializers.CharField(allow_null=True)
+    org_unit = serializers.UUIDField(source="org_unit_id")
+    org_unit_name = serializers.CharField(source="org_unit.name")
+    status = serializers.CharField()
+    joined_on = serializers.DateField()
 
 
 class DecisionSerializer(serializers.Serializer):

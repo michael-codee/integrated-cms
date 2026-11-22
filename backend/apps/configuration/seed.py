@@ -29,7 +29,8 @@ MEMBERSHIP_CATEGORIES = [
 ]
 
 INCOME_CATEGORIES = [
-    ("tithes", "Tithes", False), ("sunday-offering", "Sunday offerings", False),
+    ("tithes", "Tithes", False), ("membership-dues", "Monthly membership dues", False),
+    ("sunday-offering", "Sunday offerings", False),
     ("thanksgiving-offering", "Thanksgiving offerings", False), ("special-offering", "Special offerings", False),
     ("donations", "Donations", False), ("fundraising", "Fundraising contributions", False),
     ("conference-contributions", "Conference contributions", False),

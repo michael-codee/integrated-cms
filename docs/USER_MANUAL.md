@@ -84,6 +84,9 @@ The dashboard summarises your jurisdiction: structure, membership, finance, asse
 ### Recording income and expenditure
 *Finance → Transactions* → **Record income** (or expenditure). Choose the account (cash box, bank, mobile money), category, amount, date and method, and attach a supporting document (receipt, invoice) where you have one. **Save draft** keeps it for later; **Submit for approval** sends it to the approvers. Each entry gets a reference such as `INC-2026-000123`.
 
+### Monthly membership dues
+*Finance → Monthly dues* shows every member of your units with the twelve months of the year: a green tick is paid and approved, a clock is awaiting approval, and an empty circle is not paid (red for months that have passed since the member joined). Select an empty month, or **Record dues**, to record a payment: choose the member, the first month paid for, how many months (1 to 12, so members can pay ahead or catch up), the amount per month, the account and the payment method. The total is recorded as one income entry in the *Monthly membership dues* category and goes through the same approval as other income, so it only counts as paid once approved. A month cannot be paid twice for the same member while an earlier payment for it is awaiting approval or approved; if a payment was recorded wrongly, reverse it (see *Corrections*) and record it again. A receipt can be printed once the payment is approved.
+
 ### Approvals
 Approvers see waiting items under *Finance → Approvals* and on the dashboard. Open an entry and choose **Approve**, **Return** (for correction, with a reason) or **Reject** (with a reason). Who approves depends on the amount and type (see *Approval rules*); for example, large expenditure also needs the district and HQ. The person who recorded or submitted an entry can never approve it, and nobody approves two steps of the same entry.
 

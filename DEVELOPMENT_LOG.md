@@ -226,3 +226,18 @@ known limitations, phase by phase.
 **Not verified here:** a real Vercel deployment and a real Supabase project (no access from this environment). The first real deploy is the remaining check.
 
 **Known limitations:** uploads limited to 4 MB by Vercel; Supabase daily backups cover the database only, so buckets must be copied separately; cold start of a few seconds after idle periods.
+
+---
+
+## Monthly membership dues  ✅
+
+**Completed**
+
+- *Finance → Monthly dues*: a register of members × months for a year (paid and approved, awaiting approval, not paid) and a **Record dues** form (member, first month, 1–12 months, amount per month, account, method, reference). Works offline as a draft like other finance entries; choosing a member needs a connection.
+- A dues payment is an ordinary income `Transaction` in the new *Monthly membership dues* category with `dues_month` (first month) and `dues_months`. It therefore follows the existing income approval policy, the *income approval* setting, segregation of duties, receipts, reversal and closed-year rules unchanged.
+- Rules (in `services.validate_dues`, applied on save and again on submit): dues entries need a member and a first month; 1–12 months; at most 12 months ahead; a month cannot be paid twice for a member while another payment for it is awaiting approval or approved (rejected and reversed payments free the month). Submissions for the same member are serialised with a row lock.
+- The database guard trigger now also blocks changes to `dues_month`, `dues_months` and (on dues entries) `member_id` once an entry is submitted.
+- `GET /api/finance/dues/members/` gives treasurers a member picker (name, number, unit only) scoped to `finance.create`, since treasurers do not hold `members.view`. `GET /api/finance/dues/register/` is scoped to `finance.view`.
+- The generic *Record income* form no longer offers the dues category, so dues always carry their months.
+
+**Tests:** 8 new backend tests (approval flow, auto-approval setting, required fields, duplicate months, rejection/reversal freeing months, database guard, jurisdiction, payments spanning two years).

@@ -9,7 +9,8 @@
 Scripture text itself is not stored here: the public-domain translations ship with the web app as
 static files so they work without a connection.
 
-* ``RemoteSession`` / ``RemoteCommand`` – a phone paired with a control desk as a remote.
+* ``RemoteSession`` / ``RemoteCommand`` / ``RemoteSignal`` – a phone paired with a control desk as a
+                    remote, and the set-up messages for sending its camera to the screens.
 """
 import uuid
 
@@ -112,6 +113,29 @@ class RemoteCommand(models.Model):
     session = models.ForeignKey(RemoteSession, on_delete=models.CASCADE, related_name="commands")
     action = models.CharField(max_length=20)
     value = models.IntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["id"]
+
+
+class RemoteSignal(models.Model):
+    """WebRTC set-up messages between the phone and the desk (offer, answer, hang-up).
+
+    The picture itself goes straight from the phone to the media computer over the church Wi-Fi
+    (or through the internet when they are on different networks); only these short messages
+    pass through the server.
+    """
+
+    class Sender(models.TextChoices):
+        PHONE = "phone", "Phone"
+        DESK = "desk", "Desk"
+
+    id = models.BigAutoField(primary_key=True)
+    session = models.ForeignKey(RemoteSession, on_delete=models.CASCADE, related_name="signals")
+    sender = models.CharField(max_length=5, choices=Sender.choices)
+    kind = models.CharField(max_length=10)
+    payload = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:

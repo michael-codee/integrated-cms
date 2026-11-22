@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
-import { ChevronLeft, ChevronRight, Image as ImageIcon, ListOrdered, Pause, Play, Square, Type, WifiOff } from 'lucide-react';
+import { Camera, ChevronLeft, ChevronRight, Image as ImageIcon, ListOrdered, Pause, Play, RefreshCw, Square, Type, WifiOff } from 'lucide-react';
 import type { RemoteAction, RemoteState } from './remote';
+import { PhoneCameraSender, phoneCameraError, type Facing, type ReceivedSignal, type Signal } from './phoneCamera';
 
 /**
  * The phone remote. It opens from the QR code on the control desk; the token after # is its only
@@ -16,8 +17,8 @@ function useToken() {
   return token;
 }
 
-async function call(token: string, method: 'GET' | 'POST', body?: unknown) {
-  const res = await fetch('/api/media/remote/phone/', {
+async function call(token: string, method: 'GET' | 'POST', body?: unknown, path = '/api/media/remote/phone/') {
+  const res = await fetch(path, {
     method,
     headers: { 'X-Remote-Token': token, Accept: 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}) },
     body: body ? JSON.stringify(body) : undefined,
@@ -32,22 +33,39 @@ export default function RemotePage() {
   const [status, setStatus] = useState<Status>(token ? 'loading' : 'ended');
   const [state, setState] = useState<RemoteState | null>(null);
   const [deskConnected, setDeskConnected] = useState(true);
-  const [tab, setTab] = useState<'slides' | 'items'>('slides');
+  const [tab, setTab] = useState<'slides' | 'items' | 'camera'>('slides');
   const [message, setMessage] = useState('');
   const timer = useRef<number>();
+  const signalsAfter = useRef(0);
+  const [, rerender] = useState(0);
+  const camera = useRef<PhoneCameraSender | null>(null);
+  if (!camera.current) {
+    camera.current = new PhoneCameraSender(async (sig: Signal) => {
+      const r = await call(token, 'POST', sig, '/api/media/remote/phone/signal/');
+      if (r.status !== 202) throw new Error(r.data?.detail || 'The camera could not be offered to the desk.');
+    }, () => rerender((n) => n + 1));
+  }
+  const cam = camera.current;
 
   const refresh = useCallback(async () => {
     window.clearTimeout(timer.current);
     try {
-      const r = await call(token, 'GET');
+      const r = await call(token, 'GET', undefined, `/api/media/remote/phone/?signals_after=${signalsAfter.current}`);
       if (r.status === 410 || r.status === 404) { setStatus('ended'); return; }
       if (r.status === 200) {
         setStatus('ok');
         setDeskConnected(!!r.data.desk_connected);
         if (r.data.state && Object.keys(r.data.state).length) setState(r.data.state as RemoteState);
+        for (const sig of (r.data.signals || []) as ReceivedSignal[]) {
+          if (sig.id <= signalsAfter.current) continue;
+          signalsAfter.current = sig.id;
+          await camera.current?.answer(sig);
+        }
       } else setStatus('offline');
     } catch { setStatus('offline'); }
-    timer.current = window.setTimeout(refresh, document.hidden ? POLL_MS * 3 : POLL_MS);
+    // Quicker while the camera waits for the desk's answer.
+    const waiting = camera.current?.status === 'connecting';
+    timer.current = window.setTimeout(refresh, waiting ? 600 : document.hidden ? POLL_MS * 3 : POLL_MS);
   }, [token]);
 
   useEffect(() => {
@@ -56,7 +74,7 @@ export default function RemotePage() {
     refresh();
     const onVisible = () => { if (!document.hidden) refresh(); };
     document.addEventListener('visibilitychange', onVisible);
-    return () => { window.clearTimeout(timer.current); document.removeEventListener('visibilitychange', onVisible); };
+    return () => { window.clearTimeout(timer.current); document.removeEventListener('visibilitychange', onVisible); camera.current?.stop(); };
   }, [token, refresh]);
 
   // Keep the phone's screen on while the remote is open.
@@ -85,6 +103,7 @@ export default function RemotePage() {
     } catch { setStatus('offline'); setMessage('No connection. Check the phone\'s internet.'); }
   };
 
+  if (status === 'ended' && cam.status !== 'idle') cam.stop(false);
   if (status === 'ended') {
     return (
       <Shell>
@@ -140,10 +159,10 @@ export default function RemotePage() {
       {message && <p className="mx-4 mt-2 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-300">{message}</p>}
 
       <div className="mx-4 mt-4 flex rounded-lg bg-slate-900 p-1 text-sm ring-1 ring-slate-800" role="tablist">
-        {(['slides', 'items'] as const).map((t) => (
+        {(['slides', 'items', 'camera'] as const).map((t) => (
           <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}
             className={clsx('flex-1 rounded-md py-1.5 font-medium', tab === t ? 'bg-slate-700 text-white' : 'text-slate-400')}>
-            {t === 'slides' ? `Slides${slides.length ? ` (${slides.length})` : ''}` : 'Order of service'}
+            {t === 'slides' ? `Slides${slides.length ? ` (${slides.length})` : ''}` : t === 'items' ? 'Order' : <span className="inline-flex items-center gap-1">{cam.status === 'live' && <span className="h-2 w-2 rounded-full bg-red-500" />}Camera</span>}
           </button>
         ))}
       </div>
@@ -165,6 +184,7 @@ export default function RemotePage() {
         ))}
         {tab === 'items' && !items.length && <li className="py-4 text-center text-sm text-slate-500">No order of service is open on the desk.</li>}
       </ol>
+      {tab === 'camera' && <CameraTab sender={cam} onRefresh={refresh} />}
     </Shell>
   );
 }
@@ -188,5 +208,64 @@ function ModeButton({ on, onClick, icon, children }: { on: boolean; onClick: () 
       className={clsx('flex items-center justify-center gap-1.5 rounded-xl py-3 text-sm font-semibold', on ? 'bg-gold-400 text-slate-950' : 'bg-slate-800 active:bg-slate-700')}>
       {icon}{children}
     </button>
+  );
+}
+
+const CAMERA_STATUS = {
+  idle: '',
+  connecting: 'Connecting to the control desk…',
+  live: 'Sending. On the desk, choose Phone camera under Live camera and press Show.',
+  failed: 'The camera could not reach the media computer. Join the church Wi-Fi (the same network as the media computer) and try again.',
+};
+
+/** Sends this phone's camera to the media computer, where the desk shows it as a live camera. */
+function CameraTab({ sender, onRefresh }: { sender: PhoneCameraSender; onRefresh: () => void }) {
+  const preview = useRef<HTMLVideoElement>(null);
+  const [facing, setFacing] = useState<Facing>('environment');
+  const [sound, setSound] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const on = sender.status !== 'idle';
+  useEffect(() => {
+    const v = preview.current;
+    if (v) { v.srcObject = sender.stream; if (sender.stream) v.play().catch(() => {}); }
+  });
+  const start = async () => {
+    setBusy(true);
+    setError('');
+    try { await sender.start(facing, sound); onRefresh(); } catch (e) { sender.stop(false); setError(phoneCameraError(e)); } finally { setBusy(false); }
+  };
+  const flip = async () => {
+    const next: Facing = facing === 'environment' ? 'user' : 'environment';
+    setFacing(next);
+    if (on) { try { await sender.switchCamera(next); } catch (e) { setError(phoneCameraError(e)); } }
+  };
+  return (
+    <section className="mx-4 mb-8 mt-2 space-y-3">
+      <div className="relative aspect-video overflow-hidden rounded-xl bg-black ring-1 ring-slate-800">
+        <video ref={preview} playsInline muted className={clsx('h-full w-full object-cover', facing === 'user' && '-scale-x-100')} />
+        {!on && <p className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-slate-400">Use this phone as a camera for the screens, for example to show the preacher, the choir or a baptism.</p>}
+        {sender.status === 'live' && <span className="absolute left-2 top-2 rounded bg-red-600 px-2 py-0.5 text-xs font-bold uppercase">Live</span>}
+      </div>
+      {!on ? (
+        <>
+          <label className="flex items-center gap-2 text-sm text-slate-300">
+            <input type="checkbox" checked={sound} onChange={(e) => setSound(e.target.checked)} />
+            Also send the phone&apos;s microphone
+          </label>
+          <button type="button" disabled={busy} onClick={start} className="flex w-full items-center justify-center gap-2 rounded-xl bg-royal-600 py-3.5 font-semibold active:bg-royal-700 disabled:opacity-60">
+            <Camera className="h-5 w-5" />{busy ? 'Opening the camera…' : 'Send camera'}
+          </button>
+        </>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          <button type="button" onClick={flip} className="flex items-center justify-center gap-2 rounded-xl bg-slate-800 py-3 font-semibold active:bg-slate-700"><RefreshCw className="h-4 w-4" />{facing === 'environment' ? 'Front camera' : 'Back camera'}</button>
+          <button type="button" onClick={() => sender.stop()} className="flex items-center justify-center gap-2 rounded-xl bg-red-600 py-3 font-semibold active:bg-red-700"><Square className="h-4 w-4" />Stop camera</button>
+        </div>
+      )}
+      {CAMERA_STATUS[sender.status] && <p className={clsx('text-sm', sender.status === 'failed' ? 'text-red-300' : 'text-slate-400')}>{CAMERA_STATUS[sender.status]}</p>}
+      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-300">{error}</p>}
+      <p className="text-xs text-slate-500">Keep this page open and the phone plugged in. The picture goes straight to the media computer over the Wi-Fi; on mobile data it may not connect.</p>
+    </section>
   );
 }

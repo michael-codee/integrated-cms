@@ -22,7 +22,7 @@ from apps.audit import services as audit
 from apps.audit.models import AuditLog
 from apps.core import scoping
 
-from .models import RemoteCommand, RemoteSession
+from .models import RemoteCommand, RemoteSession, RemoteSignal
 
 SESSION_HOURS = 8
 ACTIONS = {"next", "back", "black", "clear", "logo", "show", "play", "slide", "item"}
@@ -30,6 +30,40 @@ MAX_PENDING = 40
 MAX_STATE_BYTES = 64_000
 TOKEN_HEADER = "HTTP_X_REMOTE_TOKEN"
 SEEN_WITHIN = timedelta(seconds=8)
+SIGNAL_KINDS = {"offer", "answer", "bye"}
+MAX_SIGNAL_BYTES = 40_000
+MAX_SIGNALS = 10
+
+
+def _after(data, key):
+    try:
+        return max(0, int(data.get(key) or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _clean_signal(item):
+    """A WebRTC message: offer/answer carry a session description, bye nothing. None if invalid."""
+    if not isinstance(item, dict) or item.get("kind") not in SIGNAL_KINDS:
+        return None
+    payload = item.get("payload") or {}
+    if not isinstance(payload, dict) or len(json.dumps(payload)) > MAX_SIGNAL_BYTES:
+        return None
+    if item["kind"] in ("offer", "answer"):
+        sdp = payload.get("sdp")
+        if payload.get("type") != item["kind"] or not isinstance(sdp, str) or not sdp.startswith("v="):
+            return None
+        payload = {"type": item["kind"], "sdp": sdp}
+    else:
+        payload = {}
+    return item["kind"], payload
+
+
+def _take_signals(session, sender, after):
+    """Signals from ``sender`` newer than ``after``; the ones up to ``after`` have been read."""
+    if after:
+        session.signals.filter(sender=sender, id__lte=after).delete()
+    return list(session.signals.filter(sender=sender, id__gt=after).values("id", "kind", "payload")[:MAX_SIGNALS])
 
 
 def _hash(token: str) -> str:
@@ -92,16 +126,22 @@ class RemoteSyncView(APIView):
             session.state = state
             fields.append("state")
         session.save(update_fields=fields)
-        try:
-            after = int(request.data.get("after") or 0)
-        except (TypeError, ValueError):
-            after = 0
+        after = _after(request.data, "after")
         commands = list(session.commands.filter(id__gt=after).values("id", "action", "value")[:MAX_PENDING])
         # Presses the desk has confirmed are no longer needed.
         if after:
             session.commands.filter(id__lte=after).delete()
-        return Response({"active": True, "commands": commands, "phone_connected": _recent(session.phone_seen_at),
-                         "expires_at": session.expires_at})
+        send = request.data.get("send_signals") or []
+        if not isinstance(send, list) or len(send) > MAX_SIGNALS:
+            return Response({"send_signals": "Too many messages."}, status=status.HTTP_400_BAD_REQUEST)
+        for item in send:
+            clean = _clean_signal(item)
+            if clean is None:
+                return Response({"send_signals": "Not a camera set-up message."}, status=status.HTTP_400_BAD_REQUEST)
+            RemoteSignal.objects.create(session=session, sender=RemoteSignal.Sender.DESK, kind=clean[0], payload=clean[1])
+        signals = _take_signals(session, RemoteSignal.Sender.PHONE, _after(request.data, "signals_after"))
+        return Response({"active": True, "commands": commands, "signals": signals,
+                         "phone_connected": _recent(session.phone_seen_at), "expires_at": session.expires_at})
 
 
 class RemoteEndView(APIView):
@@ -113,6 +153,7 @@ class RemoteEndView(APIView):
             session.ended_at = timezone.now()
             session.save(update_fields=["ended_at"])
             session.commands.all().delete()
+            session.signals.all().delete()
             audit.record(AuditLog.Action.UPDATE, instance=session, message="Phone remote ended")
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -139,8 +180,9 @@ class PhoneView(APIView):
         if session is None or not session.is_active:
             return self._gone()
         RemoteSession.objects.filter(pk=session.pk).update(phone_seen_at=timezone.now())
+        signals = _take_signals(session, RemoteSignal.Sender.DESK, _after(request.query_params, "signals_after"))
         return Response({"state": session.state, "desk_connected": _recent(session.desk_seen_at),
-                         "expires_at": session.expires_at})
+                         "expires_at": session.expires_at, "signals": signals})
 
     def post(self, request):
         session = self._session(request)
@@ -161,3 +203,27 @@ class PhoneView(APIView):
         cmd = RemoteCommand.objects.create(session=session, action=action, value=value)
         RemoteSession.objects.filter(pk=session.pk).update(phone_seen_at=timezone.now())
         return Response({"id": cmd.id, "desk_connected": _recent(session.desk_seen_at)}, status=status.HTTP_202_ACCEPTED)
+
+
+class PhoneSignalView(PhoneView):
+    """POST {kind, payload}: the phone's camera offer, or a hang-up."""
+
+    def get(self, request):  # pragma: no cover - only POST is offered
+        return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def post(self, request):
+        session = self._session(request)
+        if session is None or not session.is_active:
+            return self._gone()
+        clean = _clean_signal(request.data)
+        if clean is None or clean[0] == "answer":
+            return Response({"detail": "Not a camera set-up message."}, status=status.HTTP_400_BAD_REQUEST)
+        if session.signals.filter(sender=RemoteSignal.Sender.PHONE).count() >= MAX_SIGNALS:
+            return Response({"detail": "The control desk is not answering. Check that it is open."},
+                            status=status.HTTP_429_TOO_MANY_REQUESTS)
+        if clean[0] == "offer":
+            # A new offer replaces any the desk has not read yet.
+            session.signals.filter(sender=RemoteSignal.Sender.PHONE).delete()
+        sig = RemoteSignal.objects.create(session=session, sender=RemoteSignal.Sender.PHONE, kind=clean[0],
+                                          payload=clean[1])
+        return Response({"id": sig.id, "desk_connected": _recent(session.desk_seen_at)}, status=status.HTTP_202_ACCEPTED)

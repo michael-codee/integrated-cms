@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { openChannel, type LiveState, type VideoProgress } from './channel';
+import { startRelayReceiver } from './phoneCamera';
 import { useLocalVideoUrl } from './localVideos';
 import { SlideView, useObjectUrl } from './SlideView';
 
@@ -24,8 +25,9 @@ export default function OutputPage() {
     });
     channel.current = ch;
     ch.post({ type: 'hello', from: 'output' });
+    const stopRelay = startRelayReceiver();
     const ping = window.setInterval(() => ch.post({ type: 'ping', from: 'output' }), 2000);
-    return () => { window.clearInterval(ping); ch.close(); };
+    return () => { window.clearInterval(ping); ch.close(); stopRelay(); };
   }, []);
 
   // Hide the mouse pointer when it is not moving.

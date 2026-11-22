@@ -15,6 +15,7 @@ import clsx from 'clsx';
 import { api, ApiError, OfflineError } from '@/lib/api';
 import { Button, useToast } from '@/components/ui';
 import type { ScreenMode } from './channel';
+import type { ReceivedSignal, Signal } from './phoneCamera';
 
 export type RemoteAction = 'next' | 'back' | 'black' | 'clear' | 'logo' | 'show' | 'play' | 'slide' | 'item';
 export interface RemoteCommand { id: number; action: RemoteAction; value: number | null }
@@ -68,29 +69,40 @@ export function compactState(s: RemoteState): RemoteState {
   };
 }
 
-export function useRemote(state: RemoteState, onCommand: (c: RemoteCommand) => void) {
+export function useRemote(state: RemoteState, onCommand: (c: RemoteCommand) => void, onSignal?: (s: ReceivedSignal) => void) {
   const [session, setSession] = useState<Session | null>(readSession);
   const [phoneConnected, setPhoneConnected] = useState(false);
   const [online, setOnline] = useState(true);
   const [starting, setStarting] = useState(false);
   const stateJson = useMemo(() => JSON.stringify(compactState(state)), [state]);
-  const latest = useRef({ stateJson, onCommand });
-  latest.current = { stateJson, onCommand };
+  const latest = useRef({ stateJson, onCommand, onSignal });
+  latest.current = { stateJson, onCommand, onSignal };
+  // Camera set-up messages for the phone, sent with the next sync.
+  const outbox = useRef<Signal[]>([]);
+  const sendSignal = useCallback((s: Signal) => { outbox.current.push(s); }, []);
 
   useEffect(() => {
     if (!session) return;
     let stopped = false;
     let timer: number | undefined;
     let after = 0;
+    let signalsAfter = 0;
     let sent = '';
     const tick = async () => {
       const { stateJson: s } = latest.current;
+      const outgoing = outbox.current.splice(0);
       try {
-        const r = await api<{ active: boolean; commands: RemoteCommand[]; phone_connected: boolean }>(`/media/remote/${session.id}/sync/`, {
-          method: 'POST', body: { after, ...(s !== sent ? { state: JSON.parse(s) } : {}) },
+        const r = await api<{ active: boolean; commands: RemoteCommand[]; signals: ReceivedSignal[]; phone_connected: boolean }>(`/media/remote/${session.id}/sync/`, {
+          method: 'POST',
+          body: { after, signals_after: signalsAfter, ...(outgoing.length ? { send_signals: outgoing } : {}), ...(s !== sent ? { state: JSON.parse(s) } : {}) },
         });
         if (stopped) return;
         sent = s;
+        for (const sig of r.signals || []) {
+          if (sig.id <= signalsAfter) continue;
+          signalsAfter = sig.id;
+          latest.current.onSignal?.(sig);
+        }
         setOnline(true);
         setPhoneConnected(r.phone_connected);
         for (const c of r.commands) {
@@ -107,9 +119,10 @@ export function useRemote(state: RemoteState, onCommand: (c: RemoteCommand) => v
         }
         setOnline(!(e instanceof OfflineError));
         sent = ''; // send the state again once the connection is back
+        if (!(e instanceof ApiError)) outbox.current.unshift(...outgoing);
       }
-      // Faster while presses are arriving would not help: the phone waits on the same round trip.
-      if (!stopped) timer = window.setTimeout(tick, document.hidden ? POLL_MS * 2 : POLL_MS);
+      // Quicker while a camera answer is waiting to go out.
+      if (!stopped) timer = window.setTimeout(tick, outbox.current.length ? 150 : document.hidden ? POLL_MS * 2 : POLL_MS);
     };
     tick();
     return () => { stopped = true; window.clearTimeout(timer); };
@@ -133,7 +146,7 @@ export function useRemote(state: RemoteState, onCommand: (c: RemoteCommand) => v
     if (s) { try { await api(`/media/remote/${s.id}/end/`, { method: 'POST' }); } catch { /* it expires anyway */ } }
   }, [session]);
 
-  return { session, phoneConnected, online, starting, start, end };
+  return { session, phoneConnected, online, starting, start, end, sendSignal };
 }
 
 /** A QR code as an SVG (black on white, with the quiet zone scanners need). */

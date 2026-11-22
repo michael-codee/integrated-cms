@@ -313,3 +313,17 @@ known limitations, phase by phase.
 
 **Known limitations:** the remote needs the internet on both devices (or a local server) and reacts within about a second; one phone link per person at a time. Licensed translations must be imported on each media computer, from a file the ministry obtains under its licence.
 
+---
+
+## Phone camera feed and Media Officer role  ✅
+
+**Completed**
+
+- **Phone as a live camera**: the phone remote page has a *Camera* tab that sends the phone's camera (and, if ticked, its microphone) to the control desk with WebRTC. Only the offer and answer travel through the server (`RemoteSignal`, migration `presentation.0004`; `POST /api/media/remote/phone/signal/`, signals returned by the phone's poll and the desk's `sync`); ICE candidates are gathered before sending, so two messages set the link up. The picture goes peer-to-peer over the local Wi-Fi (a public STUN server is listed for phones on another network; there is no TURN relay).
+- The desk shows it as a camera source (`deviceId: "phone"` in the camera settings: *Phone camera (from the phone remote)*), with its status, and passes it to the projector window over a second, local WebRTC link set up through a `BroadcastChannel`, so camera items, the quick **Show** button, captions and countdowns work with the phone as with a USB camera. A reloaded projector gets the picture again.
+- Front/back camera switch without reconnecting; **Stop camera** or ending the remote hangs up and clears the picture.
+- **Bluetooth** was asked for but is not possible from a web page (Web Bluetooth cannot carry video or act as a peripheral); the Wi-Fi path covers the same need. Fully offline set-up needs the church's own server (Docker deployment) on the local network.
+- **Media Officer** role (`media_officer`, level 6): all media permissions including approve and delete, plus dashboard, structure, programs and departments view, announcements. Added to `DEFAULT_ROLES` and, for existing databases, by data migration `presentation.0005`.
+
+**Tests:** 2 new backend tests (camera set-up messages: who may send what, replacement, clean-up; Media Officer permissions and migration). Browser run with a fake camera: phone sends camera, desk shows *Phone camera connected* in about 2 s, picture on the desk preview and the projector window, projector reload, lens switch, stop.
+

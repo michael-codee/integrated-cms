@@ -4,6 +4,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
+import { PHONE_CAMERA, usePhoneStream } from './phoneCamera';
 import { expectedPosition, type CameraSettings, type Countdown, type LowerThird, type VideoProgress, type VideoTransport } from './channel';
 
 // ---------------------------------------------------------------- time
@@ -175,7 +176,30 @@ async function openCamera(saved: CameraSettings, withSound: boolean) {
   }
 }
 
-export function CameraFeed({ settings, muted, hidden, onError }: { settings: CameraSettings; muted: boolean; hidden?: boolean; onError?: (message: string) => void }) {
+export function CameraFeed(props: { settings: CameraSettings; muted: boolean; hidden?: boolean; onError?: (message: string) => void }) {
+  return props.settings.deviceId === PHONE_CAMERA ? <PhoneCameraFeed {...props} /> : <DeviceCameraFeed {...props} />;
+}
+
+/** The picture a phone sends from the remote page (see phoneCamera.ts). */
+function PhoneCameraFeed({ settings, muted, hidden }: { settings: CameraSettings; muted: boolean; hidden?: boolean }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  const stream = usePhoneStream();
+  const withSound = settings.audio && !muted;
+  useEffect(() => {
+    const v = ref.current;
+    if (!v) return;
+    v.srcObject = stream;
+    if (stream) v.play().catch(() => { v.muted = true; v.play().catch(() => {}); });
+  }, [stream]);
+  return (
+    <div className="absolute inset-0 bg-black" style={hidden ? { visibility: 'hidden' } : undefined}>
+      <video ref={ref} playsInline muted={!withSound} className="h-full w-full object-contain" />
+      {!stream && muted && <p className="absolute inset-x-[6cqw] top-1/2 -translate-y-1/2 text-center text-[3.2cqh] font-medium text-white/80">Waiting for the phone camera. On the phone remote, open Camera and press Send camera.</p>}
+    </div>
+  );
+}
+
+function DeviceCameraFeed({ settings, muted, hidden, onError }: { settings: CameraSettings; muted: boolean; hidden?: boolean; onError?: (message: string) => void }) {
   const ref = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState('');
   const withSound = settings.audio && !muted;

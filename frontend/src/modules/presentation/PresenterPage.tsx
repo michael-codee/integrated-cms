@@ -10,7 +10,10 @@ import { useLookup } from '@/lib/queries';
 import { useAuth } from '@/app/AuthContext';
 import { Button, Field, FormError, FormGrid, Input, Modal, PageHeader, SearchInput, Select, Textarea, useToast } from '@/components/ui';
 import { UnitSelect } from '@/components/UnitSelect';
-import { loadBible, lookup, type Bible } from './bible';
+import { DEFAULT_VERSION, loadBible, lookup, shortName, type Bible, type TranslationInfo } from './bible';
+import { useTranslations } from './bibleImport';
+import { TranslationsDialog } from './Translations';
+import { RemotePanel, useRemote, type RemoteCommand, type RemoteState } from './remote';
 import { withLocalCopy } from './cache';
 import {
   expectedPosition, openChannel, openOutputWindow, openStageWindow, type CameraSettings, type Countdown, type LiveState, type LowerThird, type ScreenMode, type VideoProgress, type VideoTransport,
@@ -68,9 +71,7 @@ export default function PresenterPage() {
     staleTime: 5 * 60 * 1000,
   });
   const local = useLocalVideos();
-  const [bible, setBible] = useState<Bible>();
-  const [bibleError, setBibleError] = useState('');
-  useEffect(() => { loadBible().then(setBible, (e: Error) => setBibleError(e.message)); }, []);
+  const translations = useTranslations();
 
   // The plan being edited: a local draft, saved with the Save button.
   const [items, setItems] = useState<PlanItem[]>([]);
@@ -99,6 +100,31 @@ export default function PresenterPage() {
   const [selection, setSelection] = useState<Selection | null>(null);
   const selectedItem = selection?.source === 'plan' ? items[selection.index] : selection?.item;
 
+  // ---------------------------------------------------------------- Bible translations
+  const planVersion = theme.bible || DEFAULT_VERSION;
+  const [quickVersion, setQuickVersion] = useState('');
+  const quickBibleId = quickVersion || planVersion;
+  const [bibles, setBibles] = useState<Record<string, Bible | undefined>>({});
+  const [bibleErrors, setBibleErrors] = useState<Record<string, string | undefined>>({});
+  const neededVersions = useMemo(() => {
+    const ids = new Set([planVersion, quickBibleId]);
+    for (const it of items) if (it.kind === 'scripture' && it.version) ids.add(it.version);
+    if (selectedItem?.kind === 'scripture' && selectedItem.version) ids.add(selectedItem.version);
+    return [...ids].sort().join(' ');
+  }, [planVersion, quickBibleId, items, selectedItem]);
+  const importedKey = translations.imported.map((t) => `${t.id}:${t.addedAt}`).join(' ');
+  useEffect(() => {
+    let cancelled = false;
+    for (const id of neededVersions.split(' ')) {
+      loadBible(id).then(
+        (b) => { if (!cancelled) { setBibles((m) => (m[id] === b ? m : { ...m, [id]: b })); setBibleErrors((m) => ({ ...m, [id]: undefined })); } },
+        (e: Error) => { if (!cancelled) { setBibles((m) => ({ ...m, [id]: undefined })); setBibleErrors((m) => ({ ...m, [id]: e.message })); } },
+      );
+    }
+    return () => { cancelled = true; };
+  }, [neededVersions, importedKey]);
+  const quickBible = bibles[quickBibleId];
+
   const songIds = useMemo(() => {
     const ids = new Set<string>();
     for (const it of items) if (it.kind === 'song') ids.add(it.song);
@@ -118,7 +144,7 @@ export default function PresenterPage() {
     return m;
   }, [songQueries, songIds]);
   const imageMap = useMemo(() => Object.fromEntries((images.data?.results || []).map((i) => [i.id, i])), [images.data]);
-  const ctx: SlideContext = useMemo(() => ({ bible, songs: songMap, images: imageMap }), [bible, songMap, imageMap]);
+  const ctx: SlideContext = useMemo(() => ({ bibles, bibleErrors, version: planVersion, songs: songMap, images: imageMap }), [bibles, bibleErrors, planVersion, songMap, imageMap]);
   const missingSongs = useMemo(() => new Set(songIds.filter((_id, i) => songQueries[i]?.error)), [songIds, songQueries]);
 
   /** The id of the copy of an item's video on this computer, if it has one. */
@@ -269,6 +295,39 @@ export default function PresenterPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [step, togglePlay]);
 
+  // ---------------------------------------------------------------- phone remote
+  const remoteState: RemoteState = useMemo(() => ({
+    plan: plan.data ? `${plan.data.title} · ${plan.data.service_date}` : '',
+    title: liveItem ? itemTitle(liveItem, ctx) : '',
+    kind: liveSlide?.kind || '',
+    lines: liveSlide ? [...(liveSlide.heading ? [liveSlide.heading] : []), ...liveSlide.lines] : [],
+    mode,
+    slide: live?.slide ?? -1,
+    slides: liveSlides.map((sl, i) => sl.lines[0] || sl.heading || sl.label || `Slide ${i + 1}`),
+    item: live?.planIndex ?? null,
+    items: items.map((it) => ({ title: itemTitle(it, ctx), kind: it.kind, slides: slidesOf(it).slides.length })),
+    next: stage.next ? (stage.nextTitle ? `${stage.nextTitle}: ` : '') + (stage.next.lines[0] || stage.next.heading || stage.next.label || '') : '',
+    video: transport && liveSlide?.kind === 'video' ? { playing: transport.playing } : null,
+  }), [plan.data, liveItem, ctx, liveSlide, mode, live, liveSlides, items, slidesOf, stage, transport]);
+  const onRemote = (c: RemoteCommand) => {
+    switch (c.action) {
+      case 'next': step(1); break;
+      case 'back': step(-1); break;
+      case 'black': case 'clear': case 'logo': toggle(c.action); break;
+      case 'show': setMode('show'); break;
+      case 'play': togglePlay(); break;
+      case 'slide':
+        if (live && c.value !== null && c.value >= 0 && c.value < liveSlides.length) goLive(live.item, live.planIndex, c.value);
+        break;
+      case 'item': {
+        const it = c.value !== null ? items[c.value] : undefined;
+        if (it && slidesOf(it).slides.length) { setSelection({ source: 'plan', index: c.value! }); goLive(it, c.value, 0); }
+        break;
+      }
+    }
+  };
+  const remote = useRemote(remoteState, onRemote);
+
   // ---------------------------------------------------------------- plan editing
   const update = (next: PlanItem[]) => { setItems(next); setDirty(true); };
   const addItem = (item: PlanItem) => {
@@ -316,14 +375,14 @@ export default function PresenterPage() {
   };
 
   // ---------------------------------------------------------------- dialogs
-  const [dialog, setDialog] = useState<null | 'plan' | 'song' | 'song-edit' | 'scripture' | 'text' | 'picture' | 'video' | 'videos'>(null);
+  const [dialog, setDialog] = useState<null | 'plan' | 'song' | 'song-edit' | 'scripture' | 'text' | 'picture' | 'video' | 'videos' | 'translations'>(null);
   const [quickRef, setQuickRef] = useState('');
   const [quickError, setQuickError] = useState('');
   const showQuickScripture = () => {
-    if (!bible) return;
+    if (!quickBible) return;
     try {
-      const p = lookup(bible, quickRef);
-      const item: PlanItem = { kind: 'scripture', key: newKey(), ref: p.reference };
+      const p = lookup(quickBible, quickRef);
+      const item: PlanItem = { kind: 'scripture', key: newKey(), ref: p.reference, version: quickBibleId };
       setSelection({ source: 'quick', item });
       goLive(item, null, 0);
       setQuickError('');
@@ -431,7 +490,7 @@ export default function PresenterPage() {
                   <Button size="sm" variant="ghost" onClick={() => setDialog('song-edit')}>Edit words</Button>
                 )}
               </div>
-              {selected?.loading && <p className="py-10 text-center text-sm text-slate-500">{selectedItem.kind === 'scripture' && bibleError ? bibleError : 'Loading…'}</p>}
+              {selected?.loading && <p className="py-10 text-center text-sm text-slate-500">Loading…</p>}
               {selected?.error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{selected.error}</p>}
               {selectedVideoMissing && selectedItem.kind === 'video' && (
                 <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
@@ -494,6 +553,7 @@ export default function PresenterPage() {
             </div>
           </div>
 
+          <RemotePanel remote={remote} />
           <CameraPanel settings={camera} onChange={setCamera} onShow={showCamera} live={liveSlide?.kind === 'camera'} />
           <LowerThirdPanel value={lowerThird} onShow={setLowerThird} onHide={() => setLowerThird(null)} />
           <CountdownPanel value={countdown} onStart={setCountdown} onStop={() => setCountdown(null)} />
@@ -503,10 +563,14 @@ export default function PresenterPage() {
             <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold"><BookOpen className="h-4 w-4 text-royal-600" />Quick scripture</p>
             <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); showQuickScripture(); }}>
               <Input value={quickRef} onChange={(e) => setQuickRef(e.target.value)} placeholder="e.g. John 3:16-18" aria-label="Bible reference" className="min-w-0 flex-1" />
-              <Button type="submit" disabled={!bible || !quickRef.trim()}>Show</Button>
+              <Select value={quickBibleId} onChange={(e) => setQuickVersion(e.target.value)} aria-label="Translation" className="w-24 shrink-0">
+                <TranslationOptions list={translations.all} />
+              </Select>
+              <Button type="submit" disabled={!quickBible || !quickRef.trim()}>Show</Button>
             </form>
             {quickError && <p className="mt-1.5 text-xs text-red-600">{quickError}</p>}
-            {!bible && <p className="mt-1.5 text-xs text-slate-500">{bibleError || 'Loading the Bible (King James Version)…'}</p>}
+            {!quickBible && <p className="mt-1.5 text-xs text-slate-500">{bibleErrors[quickBibleId] || `Loading the Bible (${shortName(quickBibleId, translations.all)})…`}</p>}
+            <button type="button" className="mt-1.5 text-xs font-medium text-royal-700 hover:underline dark:text-royal-300" onClick={() => setDialog('translations')}>Translations…</button>
             <QuickSong onShow={(item) => { setSelection({ source: 'quick', item }); goLive(item, null, 0); }} />
           </div>
 
@@ -537,6 +601,12 @@ export default function PresenterPage() {
                 {local.videos.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
               </Select>
             </Field>
+            <Field label="Bible translation" className="mt-3" hint="For scripture in this order of service, unless a passage names its own.">
+              <Select value={planVersion} onChange={(e) => setThemeValue({ bible: e.target.value })}>
+                {!translations.all.some((t) => t.id === planVersion) && <option value={planVersion}>{shortName(planVersion)} (not on this computer)</option>}
+                {translations.all.map((t) => <option key={t.id} value={t.id}>{t.short} · {t.name}</option>)}
+              </Select>
+            </Field>
             <Field label={`Text size ${Math.round((theme.font_scale || 1) * 100)}%`} className="mt-3">
               <input type="range" min={0.7} max={1.4} step={0.05} value={theme.font_scale || 1} onChange={(e) => setThemeValue({ font_scale: Number(e.target.value) })} className="w-full accent-royal-600" />
             </Field>
@@ -552,7 +622,9 @@ export default function PresenterPage() {
 
       {dialog === 'plan' && <NewPlanDialog onClose={() => setDialog(null)} onCreated={(p) => { qc.invalidateQueries({ queryKey: ['media', 'plans'] }); choosePlan(p.id); }} />}
       {dialog === 'song' && <SongPicker onClose={() => setDialog(null)} onPick={(s) => { addItem({ kind: 'song', key: newKey(), song: s.id }); setDialog(null); }} />}
-      {dialog === 'scripture' && <ScriptureDialog bible={bible} onClose={() => setDialog(null)} onAdd={(ref) => { addItem({ kind: 'scripture', key: newKey(), ref }); setDialog(null); }} />}
+      {dialog === 'scripture' && <ScriptureDialog translations={translations.all} planVersion={planVersion} onClose={() => setDialog(null)}
+        onAdd={(ref, version) => { addItem({ kind: 'scripture', key: newKey(), ref, ...(version !== planVersion ? { version } : {}) }); setDialog(null); }} />}
+      {dialog === 'translations' && <TranslationsDialog onClose={() => setDialog(null)} />}
       {dialog === 'text' && <TextDialog onClose={() => setDialog(null)} onAdd={(title, body) => { addItem({ kind: 'text', key: newKey(), title, body }); setDialog(null); }} />}
       {dialog === 'picture' && <PicturePicker images={(images.data?.results || [])} onClose={() => setDialog(null)} onPick={(img) => { addItem({ kind: 'image', key: newKey(), image: img.id }); setDialog(null); }} />}
       {dialog === 'song-edit' && selectedItem?.kind === 'song' && <SongForm songId={selectedItem.song} onClose={() => setDialog(null)} />}
@@ -635,22 +707,44 @@ function SongPicker({ onClose, onPick }: { onClose: () => void; onPick: (s: Song
   );
 }
 
-function ScriptureDialog({ bible, onClose, onAdd }: { bible?: Bible; onClose: () => void; onAdd: (ref: string) => void }) {
+function TranslationOptions({ list }: { list: TranslationInfo[] }) {
+  return <>{list.map((t) => <option key={t.id} value={t.id} title={t.name}>{t.short}</option>)}</>;
+}
+
+function ScriptureDialog({ translations, planVersion, onClose, onAdd }: { translations: TranslationInfo[]; planVersion: string; onClose: () => void; onAdd: (ref: string, version: string) => void }) {
   const [ref, setRef] = useState('');
+  const [version, setVersion] = useState(planVersion);
+  const [bible, setBible] = useState<Bible>();
+  const [loadError, setLoadError] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    setBible(undefined);
+    setLoadError('');
+    loadBible(version).then((b) => { if (!cancelled) setBible(b); }, (e: Error) => { if (!cancelled) setLoadError(e.message); });
+    return () => { cancelled = true; };
+  }, [version]);
   let preview: ReturnType<typeof lookup> | null = null;
   let error = '';
   if (bible && ref.trim()) {
     try { preview = lookup(bible, ref); } catch (e) { error = (e as Error).message; }
   }
+  const name = translations.find((t) => t.id === version)?.name || shortName(version, translations);
   return (
-    <Modal open onClose={onClose} title="Add scripture" subtitle="King James Version"
-      footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button disabled={!preview} onClick={() => preview && onAdd(preview.reference)}>Add {preview?.reference || ''}</Button></>}>
-      <form onSubmit={(e) => { e.preventDefault(); if (preview) onAdd(preview.reference); }}>
-        <Field label="Reference" hint="e.g. John 3:16-18, Psalm 23, 1 Cor 13:4-7" error={ref.trim() ? error : undefined}>
-          <Input value={ref} onChange={(e) => setRef(e.target.value)} autoFocus />
-        </Field>
+    <Modal open onClose={onClose} title="Add scripture" subtitle={name}
+      footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button disabled={!preview} onClick={() => preview && onAdd(preview.reference, version)}>Add {preview?.reference || ''}</Button></>}>
+      <form onSubmit={(e) => { e.preventDefault(); if (preview) onAdd(preview.reference, version); }}>
+        <FormGrid>
+          <Field label="Reference" hint="e.g. John 3:16-18, Psalm 23, 1 Cor 13:4-7" error={ref.trim() ? error : undefined}>
+            <Input value={ref} onChange={(e) => setRef(e.target.value)} autoFocus />
+          </Field>
+          <Field label="Translation" hint={version === planVersion ? 'The translation of this order of service.' : 'This passage only.'}>
+            <Select value={version} onChange={(e) => setVersion(e.target.value)}>
+              {translations.map((t) => <option key={t.id} value={t.id}>{t.short} · {t.name}</option>)}
+            </Select>
+          </Field>
+        </FormGrid>
       </form>
-      {!bible && <p className="mt-3 text-sm text-slate-500">Loading the Bible…</p>}
+      {!bible && <p className="mt-3 text-sm text-slate-500">{loadError || 'Loading the Bible…'}</p>}
       {preview && (
         <div className="mt-4 max-h-[40vh] space-y-1.5 overflow-y-auto rounded-lg bg-slate-50 p-3 font-serif text-sm dark:bg-slate-800/60">
           {preview.verses.map((v) => <p key={v.n}><sup className="mr-1 font-sans text-[10px] font-semibold text-royal-700">{v.n}</sup>{v.text}</p>)}

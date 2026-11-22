@@ -11,7 +11,10 @@ ITEM_KINDS = {"song", "scripture", "text", "image", "blank", "video", "camera"}
 MAX_ITEMS = 200
 REF_RE = re.compile(r"^\s*([1-3]?\s*[A-Za-z][A-Za-z .]*?)\s+(\d{1,3})(?::(\d{1,3})(?:\s*-\s*(\d{1,3}))?)?\s*$")
 THEME_KEYS = {"preset", "background_image", "background_video", "background_video_name", "font_scale", "align",
-              "show_reference", "uppercase"}
+              "show_reference", "uppercase", "bible"}
+# A Bible translation: one shipped with the app (kjv, asv, web, bsb) or one imported on a media
+# computer under a licence the ministry holds (local-<code>).
+VERSION_RE = re.compile(r"^(?:local-)?[a-z0-9]{2,12}$")
 # Videos stay on the media computer (they are too large to upload over the church's connections), so a
 # plan only names them: a short id given by that computer plus the file name to find it on another one.
 LOCAL_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
@@ -108,6 +111,11 @@ class ServicePlanSerializer(serializers.ModelSerializer):
                 if not REF_RE.match(ref):
                     raise serializers.ValidationError(f"Item {i}: '{ref}' is not a Bible reference like John 3:16-18.")
                 out["ref"] = ref[:60]
+                version = item.get("version")
+                if version:
+                    if not (isinstance(version, str) and VERSION_RE.match(version)):
+                        raise serializers.ValidationError(f"Item {i}: unknown Bible translation.")
+                    out["version"] = version
             elif kind == "text":
                 out["title"] = str(item.get("title") or "")[:160]
                 out["body"] = str(item.get("body") or "")[:4000]
@@ -147,6 +155,9 @@ class ServicePlanSerializer(serializers.ModelSerializer):
         video = theme.get("background_video")
         if video and not (isinstance(video, str) and LOCAL_ID_RE.match(video)):
             raise serializers.ValidationError("The background video is not a video from this computer.")
+        bible = theme.get("bible")
+        if bible and not (isinstance(bible, str) and VERSION_RE.match(bible)):
+            raise serializers.ValidationError("Unknown Bible translation.")
         if "background_video_name" in theme:
             theme = {**theme, "background_video_name": str(theme["background_video_name"] or "")[:200]}
         return theme

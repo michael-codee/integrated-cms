@@ -34,7 +34,7 @@ registerRoute(
 // The Bible text for the media screens: kept after first use so scripture works offline.
 registerRoute(
   ({ url }) => url.pathname.startsWith('/bible/'),
-  new CacheFirst({ cacheName: 'cmis-bible', plugins: [new ExpirationPlugin({ maxEntries: 4, maxAgeSeconds: 365 * 86400 })] }),
+  new CacheFirst({ cacheName: 'cmis-bible', plugins: [new ExpirationPlugin({ maxEntries: 8, maxAgeSeconds: 365 * 86400 })] }),
 );
 
 self.addEventListener('message', (event) => {

@@ -44,6 +44,7 @@ const PresenterPage = lazy(() => import('@/modules/presentation/PresenterPage'))
 const MediaLibraryPage = lazy(() => import('@/modules/presentation/LibraryPage'));
 const ProjectorPage = lazy(() => import('@/modules/presentation/OutputPage'));
 const StagePage = lazy(() => import('@/modules/presentation/StagePage'));
+const RemotePage = lazy(() => import('@/modules/presentation/RemotePage'));
 
 const s = (el: ReactNode) => <Suspense fallback={<PageLoader />}>{el}</Suspense>;
 const guarded = (perm: string | string[], el: ReactNode) => s(<RequirePerm perm={perm}>{el}</RequirePerm>);
@@ -64,6 +65,8 @@ export const router = createBrowserRouter([
   // The projector window and the stage display show only what the control desk on the same computer sends them.
   { path: '/presentation/output', element: s(<ProjectorPage />) },
   { path: '/presentation/stage', element: s(<StagePage />) },
+  // The phone remote: the token in the link is its only key (see presentation/remote.py).
+  { path: '/presentation/remote', element: s(<RemotePage />) },
   {
     path: '/',
     element: <RequireAuth><Layout /></RequireAuth>,

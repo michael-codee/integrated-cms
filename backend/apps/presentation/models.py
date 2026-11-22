@@ -6,10 +6,16 @@
 * ``ServicePlan`` – the order of service for one meeting of one unit: an ordered list of items
                     (songs, scripture passages, text slides, pictures, blank screens) and a look (theme).
 
-Scripture text itself is not stored here: the King James Version ships with the web app as a
-static file so it works without a connection.
+Scripture text itself is not stored here: the public-domain translations ship with the web app as
+static files so they work without a connection.
+
+* ``RemoteSession`` / ``RemoteCommand`` – a phone paired with a control desk as a remote.
 """
+import uuid
+
+from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 from apps.core.models import SoftDeleteModel
 from apps.core.uploads import RandomName, image_validator
@@ -65,3 +71,48 @@ class ServicePlan(SoftDeleteModel):
 
     def __str__(self):
         return f"{self.title} ({self.service_date})"
+
+
+class RemoteSession(models.Model):
+    """A phone remote paired with one control desk.
+
+    The desk opens a session and shows a QR code holding a random token. A phone that opens that
+    link can send button presses (next, back, black …) and read what is on screen, nothing else:
+    no sign-in on the phone, no access to church records. Only a hash of the token is stored. The
+    desk collects the presses when it polls and applies them itself, so the screens still change
+    only through the desk on the media computer.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    token_hash = models.CharField(max_length=64, unique=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    created_at = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField()
+    ended_at = models.DateTimeField(null=True, blank=True)
+    # What the desk last published for the phone (titles and words on screen, never church records).
+    state = models.JSONField(default=dict, blank=True)
+    desk_seen_at = models.DateTimeField(null=True, blank=True)
+    phone_seen_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["expires_at"])]
+
+    def __str__(self):
+        return f"Phone remote {self.id}"
+
+    @property
+    def is_active(self):
+        return self.ended_at is None and self.expires_at > timezone.now()
+
+
+class RemoteCommand(models.Model):
+    """One button press from the phone, waiting for the desk to pick it up."""
+
+    id = models.BigAutoField(primary_key=True)
+    session = models.ForeignKey(RemoteSession, on_delete=models.CASCADE, related_name="commands")
+    action = models.CharField(max_length=20)
+    value = models.IntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["id"]

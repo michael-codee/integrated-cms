@@ -216,6 +216,7 @@ REST_FRAMEWORK = {
         "login": env("THROTTLE_LOGIN", "10/min"),
         "password_reset": env("THROTTLE_PASSWORD_RESET", "5/hour"),
         "export": env("THROTTLE_EXPORT", "30/hour"),
+        "media_remote": env("THROTTLE_MEDIA_REMOTE", "300/min"),
     },
 }
 

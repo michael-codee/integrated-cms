@@ -78,6 +78,7 @@ export async function setMeta(key: string, value: unknown) {
 
 /** Remove every locally stored record (used on sign-out / account switch). */
 export async function wipeLocalData() {
+  try { localStorage.removeItem('rlwm-presentation-cache-v1'); } catch { /* storage blocked */ }
   await db.transaction('rw', db.records, db.outbox, db.meta, async () => {
     await db.records.clear();
     await db.outbox.clear();

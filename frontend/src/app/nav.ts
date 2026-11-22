@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { ArrowRightLeft, Bell, FileBarChart, FolderOpen, RefreshCcw, Boxes, CalendarCheck, CalendarDays, HandHeart, Megaphone, Building2, ClipboardCheck, KeyRound, Landmark, LayoutDashboard, ListChecks, PiggyBank, Receipt, ScrollText, Settings, ShieldCheck, UserRoundCheck, Users } from 'lucide-react';
+import { ArrowRightLeft, Bell, FileBarChart, FolderOpen, RefreshCcw, Boxes, CalendarCheck, CalendarDays, HandHeart, Megaphone, Building2, ClipboardCheck, KeyRound, Landmark, LayoutDashboard, Library, ListChecks, MonitorPlay, PiggyBank, Receipt, ScrollText, Settings, ShieldCheck, UserRoundCheck, Users } from 'lucide-react';
 
 export interface NavItem {
   to: string;
@@ -34,6 +34,13 @@ export const NAV: NavGroup[] = [
       { to: '/departments', label: 'Ministries & departments', icon: HandHeart, perm: 'departments.view' },
       { to: '/announcements', label: 'Announcements', icon: Megaphone },
       { to: '/notifications', label: 'Notifications', icon: Bell },
+    ],
+  },
+  {
+    label: 'Media',
+    items: [
+      { to: '/presentation', label: 'Media presentation', icon: MonitorPlay, perm: 'media.view' },
+      { to: '/presentation/library', label: 'Song & picture library', icon: Library, perm: 'media.view' },
     ],
   },
   {

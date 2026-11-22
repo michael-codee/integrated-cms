@@ -24,6 +24,7 @@ MODULES = {
     "departments": "Ministries & departments",
     "reports": "Reports & accountability",
     "documents": "Documents & records",
+    "media": "Media & presentation (songs, scripture, screens)",
     "notifications": "Notifications & announcements",
     "audit": "Audit trail",
     "sync": "Offline synchronisation",
@@ -134,7 +135,8 @@ DEFAULT_ROLES = [
         + _m("attendance", OPERATE)
         + _m("departments", OPERATE)
         + _m("reports", OPERATE)
-        + _m("documents", ["create", "edit"]),
+        + _m("documents", ["create", "edit"])
+        + _m("media", OPERATE + ["delete"]),
     },
     {
         "code": "minister",
@@ -193,6 +195,14 @@ DEFAULT_ROLES = [
         + _m("notifications", ["view"]) + _m("sync", ["view", "create"]),
     },
     {
+        "code": "media_team",
+        "name": "Media Team",
+        "level": 6,
+        "description": "Runs the screens during service: songs, scripture, slides and the order of service.",
+        "permissions": _m("dashboard", ["view"]) + _m("org", ["view"]) + _m("media", OPERATE + ["delete"])
+        + _m("programs", ["view"]) + _m("notifications", ["view"]) + _m("sync", ["view", "create"]),
+    },
+    {
         "code": "membership_officer",
         "name": "Membership Officer",
         "level": 6,
@@ -219,7 +229,8 @@ for _code, _name in [
             "permissions": _m("dashboard", ["view"]) + _m("org", ["view"]) + _m("members", ["view"])
             + _m("programs", OPERATE) + _m("attendance", ["view", "create", "edit"])
             + _m("departments", ["view", "edit", "submit"]) + _m("reports", ["view", "create", "edit", "submit"])
-            + _m("notifications", ["view"]) + _m("sync", ["view", "create"]),
+            + _m("notifications", ["view"]) + _m("sync", ["view", "create"])
+            + (_m("media", OPERATE) if _code == "worship_leader" else []),
         }
     )
 

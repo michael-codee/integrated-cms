@@ -38,6 +38,9 @@ const UsersPage = lazy(() => import('@/modules/admin/UsersPage'));
 const RolesPage = lazy(() => import('@/modules/admin/RolesPage'));
 const SettingsPage = lazy(() => import('@/modules/admin/SettingsPage'));
 const AuditPage = lazy(() => import('@/modules/admin/AuditPage'));
+const PresenterPage = lazy(() => import('@/modules/presentation/PresenterPage'));
+const MediaLibraryPage = lazy(() => import('@/modules/presentation/LibraryPage'));
+const ProjectorPage = lazy(() => import('@/modules/presentation/OutputPage'));
 
 const s = (el: ReactNode) => <Suspense fallback={<PageLoader />}>{el}</Suspense>;
 const guarded = (perm: string | string[], el: ReactNode) => s(<RequirePerm perm={perm}>{el}</RequirePerm>);
@@ -55,6 +58,8 @@ export const router = createBrowserRouter([
   { path: '/login', element: s(<LoginPage />) },
   { path: '/forgot-password', element: s(<ForgotPasswordPage />) },
   { path: '/reset-password', element: s(<ResetPasswordPage />) },
+  // The projector window shows only what the control desk on the same computer sends it.
+  { path: '/presentation/output', element: s(<ProjectorPage />) },
   {
     path: '/',
     element: <RequireAuth><Layout /></RequireAuth>,
@@ -85,6 +90,8 @@ export const router = createBrowserRouter([
       { path: 'reports', element: guarded('reports.view', <ReportsPage />) },
       { path: 'reports/:id', element: guarded('reports.view', <ReportDetailPage />) },
       { path: 'documents', element: guarded('documents.view', <DocumentsPage />) },
+      { path: 'presentation', element: guarded('media.view', <PresenterPage />) },
+      { path: 'presentation/library', element: guarded('media.view', <MediaLibraryPage />) },
       { path: 'sync', element: s(<SyncCentrePage />) },
       { path: 'admin/users', element: guarded('users.view', <UsersPage />) },
       { path: 'admin/roles', element: guarded('roles.edit', <RolesPage />) },

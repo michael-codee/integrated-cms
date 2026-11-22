@@ -226,3 +226,20 @@ known limitations, phase by phase.
 **Not verified here:** a real Vercel deployment and a real Supabase project (no access from this environment). The first real deploy is the remaining check.
 
 **Known limitations:** uploads limited to 4 MB by Vercel; Supabase daily backups cover the database only, so buckets must be copied separately; cold start of a few seconds after idle periods.
+
+---
+
+## Media presentation, phase 1 — songs, scripture and slides on the screens  ✅
+
+**Completed**
+
+- Backend app `apps.presentation` (permission module `media`): church-wide **song library** (lyrics as plain text, blank line = new slide, `[Chorus]` = section name, full-text search) and **picture library** (backgrounds and picture slides, same upload checks and signed links as other files); **service plans** (order of service) per unit with an ordered list of items (song, scripture, text, picture, blank) and a look (theme), validated on the server. Soft delete and audit trail as everywhere else.
+- New default role **Media Team**; media permissions for branch pastors and worship leaders; a data migration grants them to roles that already exist in a live database (`seed_initial` only fills new roles).
+- Frontend: **Media presentation** control desk (order of service, slide grid, live screen, Back/Next, Black, Clear words, Logo, keyboard shortcuts, quick scripture, quick song, five looks with background picture, text size, alignment) and a **projector window** (`/presentation/output`) that opens on the second screen where the browser allows it. Desk and projector talk through a `BroadcastChannel` on the same computer, so the screens do not depend on the internet; pictures travel as Blobs, so no signed link expires on the projector.
+- **King James Version** (public domain, 31,102 verses) ships as `/bible/kjv.json` (1.2 MB compressed), cached by the service worker on first use; references such as `jn 3:16-18`, `Ps 23`, `II Kings 2:9` are understood.
+- The desk keeps a local copy of the plans and songs it opened (cleared on sign-out) for use if the connection drops mid-service.
+
+**Tests:** 12 backend tests (library sharing and search, permissions, uploads, plan scoping, item and theme validation, permission migration) + 3 frontend unit tests (scripture lookup, song slides); an end-to-end browser run covered adding a song, building an order of service, opening the projector window, going live, moving across items with the keyboard, black screen, changing the look, quick scripture and reloading the projector window.
+
+**Next phases (not built):** video files and live camera or HDMI-capture feeds, video backgrounds, lower thirds, countdown timer, stage display for the preacher; then phone remote and other Bible translations (licence needed). Streaming to YouTube or Facebook is left to OBS.
+

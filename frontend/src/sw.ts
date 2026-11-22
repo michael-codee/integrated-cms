@@ -28,6 +28,12 @@ registerRoute(
   new CacheFirst({ cacheName: 'cmis-media', plugins: [new ExpirationPlugin({ maxEntries: 300, maxAgeSeconds: 30 * 86400 })] }),
 );
 
+// The Bible text for the media screens: kept after first use so scripture works offline.
+registerRoute(
+  ({ url }) => url.pathname.startsWith('/bible/'),
+  new CacheFirst({ cacheName: 'cmis-bible', plugins: [new ExpirationPlugin({ maxEntries: 4, maxAgeSeconds: 365 * 86400 })] }),
+);
+
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
 });

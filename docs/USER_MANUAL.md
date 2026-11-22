@@ -134,7 +134,32 @@ The bell shows notifications about items waiting for you and decisions on your e
 
 ---
 
-## 12. Good practice
+## 12. Media presentation (screens during service)
+
+For the media team. You need the **Media Team** role (pastors and worship leaders have it too).
+
+**Set up the computer once.** Connect the projector or TV as a second screen (extended, not mirrored). Open **Media → Media presentation** in Chrome or Edge and press **Open projector window**. If the browser asks to place windows on your screens, allow it; otherwise drag the new window onto the projector. Click inside that window once to fill the screen (double-click to leave).
+
+**Before service.** Press **+** to make an order of service for the date, then add items with the buttons under the list: **Song** (from the shared library), **Scripture** (type a reference such as *John 3:16-18* or *Ps 23*), **Text** (announcements, sermon points), **Picture** and **Blank**. Reorder with the arrows and press **Save changes**. Choose the look on the right (colours, background picture, text size); it is saved with the order of service.
+
+**During service.** Click an item, then click a slide to put it on the screen. The keyboard does the rest:
+
+| Key | Does |
+|---|---|
+| → , ↓ , Space, Page Down | Next slide (carries on into the next item) |
+| ← , ↑ , Page Up | Previous slide |
+| B | Black screen (press again to show) |
+| C | Clear the words, keep the background |
+| L | Show the church logo |
+| Esc | Show the current slide again |
+
+**Quick scripture** and **Quick song** put something on the screen at once without adding it to the order of service, for when the preacher calls a verse.
+
+**Songs and pictures** live in **Media → Song & picture library**, shared by every branch. When typing a song, leave a blank line between slides and put a section name such as `[Chorus]` on its own line.
+
+**If the internet drops.** The projector window gets everything from the control desk on the same computer, so the screens keep working. The King James Bible is kept on the computer after it is first used, and the desk keeps a copy of the orders of service and songs it has opened. Open the order of service once before the service starts while you are online.
+
+## 13. Good practice
 
 - Never share your password or sign in for someone else; every action is recorded under your name.
 - Lock your phone with a PIN; the app keeps church data on the device while you are signed in.

@@ -7,6 +7,7 @@ from apps.audit.models import AuditLog
 from apps.core import scoping
 from apps.core.events import publish
 from apps.core.exceptions import BusinessRuleError
+from apps.organization.models import member_level_codes
 
 from .models import BaptismRecord, Member, MembershipHistory, MemberTransfer
 
@@ -121,7 +122,7 @@ def _complete_transfer(transfer, user, note=""):
 
 @transaction.atomic
 def request_transfer(member, to_unit, user, reason="", effective_date=None, transfer_id=None):
-    if to_unit.unit_type not in ("branch", "congregation"):
+    if to_unit.unit_type not in member_level_codes():
         raise BusinessRuleError("Members can only be transferred to a branch or congregation.")
     if to_unit.pk == member.org_unit_id:
         raise BusinessRuleError("The member already belongs to that branch.")

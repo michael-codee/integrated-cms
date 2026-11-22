@@ -18,6 +18,10 @@ from apps.core.models import BaseModel, SyncModel
 
 
 class UnitType(models.TextChoices):
+    """Codes of the levels installed by default. The structure itself is
+    defined by the administrator as ``StructureLevel`` rows; only
+    ``headquarters`` (the root) and ``branch`` are fixed system levels."""
+
     HEADQUARTERS = "headquarters", "Headquarters"
     REGION = "region", "Region"
     DISTRICT = "district", "District"
@@ -25,13 +29,71 @@ class UnitType(models.TextChoices):
     CONGREGATION = "congregation", "Congregation / Assembly"
 
 
-UNIT_RANK = {
-    UnitType.HEADQUARTERS: 0,
-    UnitType.REGION: 1,
-    UnitType.DISTRICT: 2,
-    UnitType.BRANCH: 3,
-    UnitType.CONGREGATION: 4,
-}
+ROOT_LEVEL = UnitType.HEADQUARTERS
+SYSTEM_LEVELS = {UnitType.HEADQUARTERS, UnitType.BRANCH}
+
+# (code, name, plural, rank, prefix, holds_members, icon)
+DEFAULT_LEVELS = [
+    ("headquarters", "Headquarters", "Headquarters", 0, "HQ", False, "landmark"),
+    ("region", "Region", "Regions", 10, "RG", False, "globe"),
+    ("district", "District", "Districts", 20, "DT", False, "building2"),
+    ("branch", "Branch", "Branches", 30, "BR", True, "church"),
+    ("congregation", "Congregation / Assembly", "Congregations", 40, "CG", True, "building"),
+]
+
+
+class StructureLevel(BaseModel):
+    """One level of the church hierarchy (e.g. Region, District, Branch),
+    defined by the administrator. A unit may only sit under a unit of a
+    level with a lower ``rank``."""
+
+    code = models.SlugField(max_length=20, unique=True, help_text="Fixed once created, e.g. 'zone'.")
+    name = models.CharField(max_length=80)
+    plural_name = models.CharField(max_length=80, blank=True, default="")
+    rank = models.PositiveSmallIntegerField(help_text="Position in the hierarchy; lower is higher up.")
+    code_prefix = models.CharField(max_length=4, help_text="Prefix for generated unit codes, e.g. 'ZN'.")
+    holds_members = models.BooleanField(default=False, help_text="Members are registered directly at this level.")
+    icon = models.CharField(max_length=20, blank=True, default="building")
+    description = models.TextField(blank=True, default="")
+    is_active = models.BooleanField(default=True, help_text="Inactive levels cannot receive new units.")
+
+    class Meta:
+        ordering = ["rank", "name"]
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def is_system(self):
+        return self.code in SYSTEM_LEVELS
+
+
+def levels_by_code():
+    return {lvl.code: lvl for lvl in StructureLevel.objects.all()}
+
+
+def level_rank(code):
+    lvl = StructureLevel.objects.filter(code=code).only("rank").first()
+    if lvl is None:
+        raise ValidationError({"unit_type": f"Unknown structure level '{code}'."})
+    return lvl.rank
+
+
+def level_name(code):
+    lvl = StructureLevel.objects.filter(code=code).only("name").first()
+    return lvl.name if lvl else (code or "").replace("_", " ").title()
+
+
+def member_level_codes():
+    """Levels at which members can be registered (branches, congregations…)."""
+    return list(StructureLevel.objects.filter(holds_members=True).values_list("code", flat=True))
+
+
+def seed_levels():
+    for code, name, plural, rank, prefix, members, icon in DEFAULT_LEVELS:
+        StructureLevel.objects.get_or_create(code=code, defaults={
+            "name": name, "plural_name": plural, "rank": rank, "code_prefix": prefix,
+            "holds_members": members, "icon": icon})
 
 
 class OrgUnit(SyncModel):
@@ -42,7 +104,7 @@ class OrgUnit(SyncModel):
 
     code = models.CharField(max_length=32, unique=True)
     name = models.CharField(max_length=200)
-    unit_type = models.CharField(max_length=20, choices=UnitType.choices, db_index=True)
+    unit_type = models.CharField(max_length=20, db_index=True, help_text="Code of the StructureLevel.")
     parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.PROTECT, related_name="children")
     path = models.CharField(max_length=600, unique=True, editable=False, db_index=True)
     depth = models.PositiveSmallIntegerField(default=0, editable=False)
@@ -73,13 +135,27 @@ class OrgUnit(SyncModel):
     # ------------------------------------------------------------------ tree
     @property
     def rank(self):
-        return UNIT_RANK[self.unit_type]
+        return level_rank(self.unit_type)
+
+    @property
+    def level(self):
+        return StructureLevel.objects.filter(code=self.unit_type).first()
+
+    def get_unit_type_display(self):
+        return level_name(self.unit_type)
 
     def compute_path(self):
         base = self.parent.path if self.parent_id else "/"
         return f"{base}{self.id.hex}/"
 
     def clean(self):
+        level = StructureLevel.objects.filter(code=self.unit_type).first()
+        if level is None:
+            raise ValidationError({"unit_type": "Choose a level defined in the church structure."})
+        changed_level = self._state.adding or OrgUnit.all_objects.filter(pk=self.pk).exclude(
+            unit_type=self.unit_type).exists()
+        if not level.is_active and changed_level:
+            raise ValidationError({"unit_type": f"The {level.name} level is no longer in use."})
         if self.unit_type == UnitType.HEADQUARTERS:
             if self.parent_id:
                 raise ValidationError({"parent": "Headquarters cannot have a parent unit."})
@@ -89,10 +165,17 @@ class OrgUnit(SyncModel):
             return
         if not self.parent_id:
             raise ValidationError({"parent": "This unit must belong to a parent unit."})
-        if UNIT_RANK[self.parent.unit_type] >= UNIT_RANK[self.unit_type]:
+        if level_rank(self.parent.unit_type) >= level.rank:
             raise ValidationError(
-                {"parent": f"A {self.get_unit_type_display()} cannot be placed under a {self.parent.get_unit_type_display()}."}
+                {"parent": f"A {level.name} cannot be placed under a {self.parent.get_unit_type_display()}."}
             )
+        if not self._state.adding:
+            below = OrgUnit.objects.filter(parent_id=self.pk).values_list("unit_type", flat=True).distinct()
+            ranks = dict(StructureLevel.objects.filter(code__in=list(below)).values_list("code", "rank"))
+            clash = [c for c, r in ranks.items() if r <= level.rank]
+            if clash:
+                raise ValidationError({"unit_type": f"Units below this one are at the {level_name(clash[0])} "
+                                                    f"level, which is not below {level.name}."})
         if not self._state.adding and self.parent.path.startswith(self.path_before_change or self.path):
             raise ValidationError({"parent": "A unit cannot be moved under itself or one of its descendants."})
 
@@ -150,6 +233,7 @@ class OrgUnitHistory(BaseModel):
         MOVED = "moved"
         ACTIVATED = "activated"
         DEACTIVATED = "deactivated"
+        REMOVED = "removed"
         LEADER_ASSIGNED = "leader_assigned"
         LEADER_ENDED = "leader_ended"
 
@@ -168,8 +252,8 @@ class LeadershipPosition(BaseModel):
 
     code = models.SlugField(max_length=60, unique=True)
     title = models.CharField(max_length=120)
-    unit_type = models.CharField(max_length=20, choices=UnitType.choices, blank=True, default="",
-                                 help_text="Level this position applies to (blank = any).")
+    unit_type = models.CharField(max_length=20, blank=True, default="",
+                                 help_text="Structure level code this position applies to (blank = any).")
     grants_role = models.ForeignKey("accounts.Role", null=True, blank=True, on_delete=models.PROTECT,
                                     related_name="positions")
     is_head = models.BooleanField(default=False, help_text="Leader-in-charge of the unit (one at a time).")
@@ -181,6 +265,9 @@ class LeadershipPosition(BaseModel):
 
     def __str__(self):
         return self.title
+
+    def get_unit_type_display(self):
+        return level_name(self.unit_type) if self.unit_type else "Any level"
 
 
 class LeadershipAppointment(SyncModel):

@@ -3,10 +3,17 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/lib/api';
 import type { OrgUnit } from '@/app/types';
 import { Button, Field, FormError, FormGrid, Input, Modal, Select, Textarea, useToast } from '@/components/ui';
-import { UNIT_LABELS, useOrgUnits } from '@/lib/queries';
+import { useLevelLabels, useOrgUnits, useStructureLevels } from '@/lib/queries';
+import type { StructureLevel } from '@/app/types';
 
-const RANK: Record<string, number> = { headquarters: 0, region: 1, district: 2, branch: 3, congregation: 4 };
-const CHILD_TYPE: Record<string, OrgUnit['unit_type']> = { headquarters: 'region', region: 'district', district: 'branch', branch: 'congregation' };
+const NO_LEVELS: StructureLevel[] = [];
+
+/** The active level directly below ``code`` (e.g. district → branch), if any. */
+export function childLevel(levels: StructureLevel[], code: string): StructureLevel | undefined {
+  const rank = levels.find((l) => l.code === code)?.rank;
+  if (rank === undefined) return undefined;
+  return levels.filter((l) => l.is_active && l.rank > rank).sort((a, b) => a.rank - b.rank)[0];
+}
 
 type FormState = Partial<Record<keyof OrgUnit, string>>;
 
@@ -14,6 +21,9 @@ export function UnitForm({ open, onClose, unit, parent }: { open: boolean; onClo
   const qc = useQueryClient();
   const toast = useToast();
   const { data: units = [] } = useOrgUnits();
+  const levels = useStructureLevels().data || NO_LEVELS;
+  const UNIT_LABELS = useLevelLabels();
+  const rank = (code?: string) => levels.find((l) => l.code === code)?.rank ?? 999;
   const [form, setForm] = useState<FormState>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -24,7 +34,7 @@ export function UnitForm({ open, onClose, unit, parent }: { open: boolean; onClo
       setForm(Object.fromEntries(Object.entries(unit).map(([k, v]) => [k, v == null ? '' : String(v)])) as FormState);
     } else {
       setForm({
-        unit_type: parent ? CHILD_TYPE[parent.unit_type] : 'branch',
+        unit_type: (parent && childLevel(levels, parent.unit_type)?.code) || 'branch',
         parent: parent?.id || '',
         status: 'active',
         country: parent?.country || 'Sierra Leone',
@@ -32,10 +42,10 @@ export function UnitForm({ open, onClose, unit, parent }: { open: boolean; onClo
         civil_district: parent?.civil_district || '',
       });
     }
-  }, [open, unit, parent]);
+  }, [open, unit, parent, levels]);
 
   const set = (k: keyof OrgUnit) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));
-  const possibleParents = units.filter((u) => RANK[u.unit_type] < RANK[form.unit_type || 'branch'] && (!unit || !u.path.startsWith(unit.path)));
+  const possibleParents = units.filter((u) => rank(u.unit_type) < rank(form.unit_type || 'branch') && (!unit || !u.path.startsWith(unit.path)));
 
   const mutation = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
@@ -75,7 +85,7 @@ export function UnitForm({ open, onClose, unit, parent }: { open: boolean; onClo
 
   return (
     <Modal open={open} onClose={onClose} size="lg" title={unit ? `Edit ${unit.name}` : 'Add church unit'}
-      subtitle={unit ? `${UNIT_LABELS[unit.unit_type]} · ${unit.code}` : 'Regions, districts, branches and congregations can be added at any time.'}
+      subtitle={unit ? `${UNIT_LABELS[unit.unit_type]} · ${unit.code}` : 'Branches and other units can be added at any time. The levels themselves are set under Structure levels.'}
       footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={submit} loading={mutation.isPending}>{unit ? 'Save changes' : 'Create unit'}</Button></>}>
       <form onSubmit={submit} className="space-y-5" noValidate>
         <FormError message={errors.form && !Object.keys(errors).some((k) => k !== 'form') ? errors.form : null} />
@@ -83,7 +93,7 @@ export function UnitForm({ open, onClose, unit, parent }: { open: boolean; onClo
           <Field label="Name" required error={errors.name} className="sm:col-span-2"><Input value={form.name || ''} onChange={set('name')} placeholder="e.g. Makeni Branch" /></Field>
           <Field label="Type" required error={errors.unit_type}>
             <Select value={form.unit_type || ''} onChange={set('unit_type')} disabled={!!unit}>
-              {Object.entries(UNIT_LABELS).filter(([k]) => k !== 'headquarters' || unit?.unit_type === 'headquarters').map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              {levels.filter((l) => (l.is_active && l.code !== 'headquarters') || l.code === unit?.unit_type).map((l) => <option key={l.code} value={l.code}>{l.name}</option>)}
             </Select>
           </Field>
           <Field label="Code" error={errors.code} hint={unit ? undefined : 'Leave blank to generate automatically.'}><Input value={form.code || ''} onChange={set('code')} placeholder="BR-MAK-001" /></Field>

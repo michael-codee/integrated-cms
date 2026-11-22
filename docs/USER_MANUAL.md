@@ -155,9 +155,22 @@ For the media team. You need the **Media Team** role (pastors and worship leader
 | B | Black screen (press again to show) |
 | C | Clear the words, keep the background |
 | L | Show the church logo |
+| P | Play or pause the video on screen |
 | Esc | Show the current slide again |
 
 **Quick scripture** and **Quick song** put something on the screen at once without adding it to the order of service, for when the preacher calls a verse.
+
+**Videos.** Press **Videos** at the top and **Add videos** to copy sermon clips, song videos or moving backgrounds from the computer's folders into the app. They are kept on that computer only (they are too large to upload), so add them on the media computer itself. MP4 (H.264) and WebM files play best. Add a video to the order of service with **Video**, or press **Play now** in the Videos window. A video starts when it goes on screen; use **Pause**, **Start again**, **Repeat**, the position bar and the volume under the live screen. Sound comes from the projector window: if the desk says the projector is playing without sound, click once inside the projector window. On another computer, add the same file (same name) and the order of service finds it.
+
+**Moving background.** Under **Look**, choose a video from this computer as **Moving background**; it loops silently behind the words.
+
+**Live camera or HDMI capture.** Plug in the camera or capture card, then under **Live camera** press **Find cameras**, allow the camera when the browser asks, and choose the device. Press **Show** to put it on the screen at once, or add **Camera** to the order of service. Tick *Play the device's sound* only when the sound does not already go through the mixer. If the panel says the camera is switched off, press **Reload to use the camera**.
+
+**Name caption.** Type a name and title (for example *Rev. John Kamara · Guest Minister*) and press **Show** to put a caption at the bottom of the screen, over a camera, video or slide. **Hide** removes it. Recent captions are listed for one-click reuse.
+
+**Countdown.** Choose the words (for example *Service begins in*), where to show it (screen, stage display or both), full screen or small in the corner, then press a number of minutes or set a clock time with **Until**. **Stop** removes it.
+
+**Stage display for the preacher.** With a third screen (or a TV facing the pulpit), press **Stage display** and move the window there. It shows what is on the screen, the next slide, the notes for this part of the service, the time, the countdown when it is set for the stage, and messages you send with **Message to the preacher** (such as *5 minutes left*). Write notes for any item of the order of service in **Notes for the preacher** below its slides; they never appear on the projector.
 
 **Songs and pictures** live in **Media → Song & picture library**, shared by every branch. When typing a song, leave a blank line between slides and put a section name such as `[Chorus]` on its own line.
 

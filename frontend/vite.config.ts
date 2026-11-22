@@ -42,6 +42,8 @@ export default defineConfig({
   build: {
     chunkSizeWarningLimit: 1200,
     rollupOptions: {
+      // presentation.html is the same app shell, served for /presentation pages with camera access allowed.
+      input: { main: path.resolve(__dirname, 'index.html'), presentation: path.resolve(__dirname, 'presentation.html') },
       output: {
         manualChunks: { charts: ['recharts'], map: ['leaflet', 'react-leaflet'], vendor: ['react', 'react-dom', 'react-router-dom', '@tanstack/react-query', 'dexie'] },
       },

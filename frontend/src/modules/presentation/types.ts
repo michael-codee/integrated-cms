@@ -22,16 +22,27 @@ export interface MediaImage {
   image: string;
 }
 
-export type PlanItem =
-  | { kind: 'song'; key: string; song: string; label?: string }
-  | { kind: 'scripture'; key: string; ref: string; label?: string }
-  | { kind: 'text'; key: string; title: string; body: string; label?: string }
-  | { kind: 'image'; key: string; image: string; label?: string }
-  | { kind: 'blank'; key: string; label?: string };
+/** Every item can carry notes for the preacher; they show on the stage display only. */
+interface ItemBase { key: string; label?: string; notes?: string }
+
+export type PlanItem = ItemBase & (
+  | { kind: 'song'; song: string }
+  | { kind: 'scripture'; ref: string }
+  | { kind: 'text'; title: string; body: string }
+  | { kind: 'image'; image: string }
+  /** A video kept on the media computer: its local id, and the file name to find it on another computer. */
+  | { kind: 'video'; video: string; name: string; loop?: boolean }
+  /** The live camera or HDMI capture feed chosen on this computer. */
+  | { kind: 'camera' }
+  | { kind: 'blank' }
+);
 
 export interface Theme {
   preset?: string;
   background_image?: string | null;
+  /** A looping video behind the words: local id plus file name (videos stay on the media computer). */
+  background_video?: string | null;
+  background_video_name?: string;
   font_scale?: number;
   align?: 'center' | 'left';
   show_reference?: boolean;
@@ -54,7 +65,7 @@ export interface ServicePlan {
 
 /** One screenful. */
 export interface Slide {
-  kind: 'song' | 'scripture' | 'text' | 'image' | 'blank';
+  kind: 'song' | 'scripture' | 'text' | 'image' | 'video' | 'camera' | 'blank';
   /** Section name, e.g. "Chorus", shown on the control desk only. */
   label?: string;
   heading?: string;
@@ -63,4 +74,7 @@ export interface Slide {
   footer?: string;
   /** Picture slides: the library picture id. */
   image?: string;
+  /** Video slides: the local video id and whether it repeats. */
+  video?: string;
+  loop?: boolean;
 }

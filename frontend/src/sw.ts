@@ -20,7 +20,10 @@ cleanupOutdatedCaches();
 clientsClaim();
 precacheAndRoute(self.__WB_MANIFEST);
 
-registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html'), { denylist: [/^\/api\//, /^\/media\//, /^\/django-admin\//] }));
+// The media pages get their own copy of the app shell, served with a Permissions-Policy that allows
+// the camera and capture card (the rest of the app keeps them switched off).
+registerRoute(new NavigationRoute(createHandlerBoundToURL('/presentation.html'), { allowlist: [/^\/presentation(\/|$)/] }));
+registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html'), { denylist: [/^\/api\//, /^\/media\//, /^\/django-admin\//, /^\/presentation(\/|$)/] }));
 
 // Uploaded images (logos, photos) – cache for offline viewing.
 registerRoute(

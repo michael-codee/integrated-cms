@@ -3,7 +3,7 @@ import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
 import {
-  ArrowDown, ArrowUp, BookOpen, ChevronLeft, ChevronRight, Image as ImageIcon, Library, MonitorPlay, MonitorX, Music, Plus, Save, Square, Sun, Type, X,
+  ArrowDown, ArrowUp, BookOpen, ChevronLeft, ChevronRight, Film, Image as ImageIcon, Library, MonitorPlay, MonitorX, Music, Plus, Presentation, Save, Square, Sun, Type, Webcam, X,
 } from 'lucide-react';
 import { api, ApiError, type Page } from '@/lib/api';
 import { useLookup } from '@/lib/queries';
@@ -12,8 +12,12 @@ import { Button, Field, FormError, FormGrid, Input, Modal, PageHeader, SearchInp
 import { UnitSelect } from '@/components/UnitSelect';
 import { loadBible, lookup, type Bible } from './bible';
 import { withLocalCopy } from './cache';
-import { openChannel, openOutputWindow, type LiveState, type ScreenMode } from './channel';
-import { slidesFor, itemTitle, type SlideContext } from './slides';
+import {
+  expectedPosition, openChannel, openOutputWindow, openStageWindow, type CameraSettings, type Countdown, type LiveState, type LowerThird, type ScreenMode, type VideoProgress, type VideoTransport,
+} from './channel';
+import { CameraPanel, CountdownPanel, LowerThirdPanel, StageMessagePanel, VideoControls, VideoLibrary, readCameraSettings } from './LivePanels';
+import { resolveVideo, useLocalVideos, useLocalVideoUrl } from './localVideos';
+import { nextSlide, slidesFor, itemTitle, type SlideContext } from './slides';
 import { SlideView } from './SlideView';
 import { PRESETS } from './themes';
 import { SongForm } from './LibraryPage';
@@ -27,7 +31,13 @@ type Selection = { source: 'plan'; index: number } | { source: 'quick'; item: Pl
 interface Live { item: PlanItem; planIndex: number | null; slide: number }
 
 const newKey = () => Math.random().toString(36).slice(2, 10);
-const ITEM_ICONS: Record<PlanItem['kind'], typeof Music> = { song: Music, scripture: BookOpen, text: Type, image: ImageIcon, blank: Square };
+const ITEM_ICONS: Record<PlanItem['kind'], typeof Music> = { song: Music, scripture: BookOpen, text: Type, image: ImageIcon, video: Film, camera: Webcam, blank: Square };
+
+/** A slide on the desk, with its local video opened when it has one. */
+function DeskSlide({ videoId, ...props }: React.ComponentProps<typeof SlideView> & { videoId?: string | null }) {
+  const videoUrl = useLocalVideoUrl(videoId);
+  return <SlideView {...props} videoUrl={videoUrl} />;
+}
 
 function readLastPlan() {
   try { return localStorage.getItem(LAST_PLAN) || ''; } catch { return ''; }
@@ -57,6 +67,7 @@ export default function PresenterPage() {
     queryFn: () => withLocalCopy('images', () => api<Page<MediaImage>>('/media/images/', { params: { page_size: 200 } })),
     staleTime: 5 * 60 * 1000,
   });
+  const local = useLocalVideos();
   const [bible, setBible] = useState<Bible>();
   const [bibleError, setBibleError] = useState('');
   useEffect(() => { loadBible().then(setBible, (e: Error) => setBibleError(e.message)); }, []);
@@ -110,6 +121,9 @@ export default function PresenterPage() {
   const ctx: SlideContext = useMemo(() => ({ bible, songs: songMap, images: imageMap }), [bible, songMap, imageMap]);
   const missingSongs = useMemo(() => new Set(songIds.filter((_id, i) => songQueries[i]?.error)), [songIds, songQueries]);
 
+  /** The id of the copy of an item's video on this computer, if it has one. */
+  const localVideoOf = useCallback((item?: PlanItem | null) => (item?.kind === 'video' ? resolveVideo(local.videos, item.video, item.name)?.id ?? null : null), [local.videos]);
+
   const slidesOf = useCallback((item: PlanItem) => {
     if (item.kind === 'song' && missingSongs.has(item.song)) return { slides: [] as Slide[], error: 'This song is no longer in the library.' };
     return slidesFor(item, ctx);
@@ -119,9 +133,31 @@ export default function PresenterPage() {
   const [live, setLive] = useState<Live | null>(null);
   const [mode, setMode] = useState<ScreenMode>('show');
   const [outputSeen, setOutputSeen] = useState(0);
+  const [stageSeen, setStageSeen] = useState(0);
+  const [transport, setTransport] = useState<VideoTransport | null>(null);
+  const [progress, setProgress] = useState<VideoProgress | null>(null);
+  const [camera, setCamera] = useState<CameraSettings>(readCameraSettings);
+  const [lowerThird, setLowerThird] = useState<LowerThird | null>(null);
+  const [countdown, setCountdown] = useState<Countdown | null>(null);
+  const [stageMessage, setStageMessage] = useState('');
   const [, tick] = useState(0);
   const liveSlides = useMemo(() => (live ? slidesOf(live.item).slides : []), [live, slidesOf]);
   const liveSlide = live ? liveSlides[live.slide] || null : null;
+  // The item as it is in the plan now (its notes may have been edited since it went live).
+  const liveItem = live ? (live.planIndex !== null ? items[live.planIndex] || live.item : live.item) : null;
+  const liveVideoId = localVideoOf(live?.item);
+  const backgroundVideoId = resolveVideo(local.videos, theme.background_video, theme.background_video_name)?.id ?? null;
+  const backgroundVideoUrl = useLocalVideoUrl(backgroundVideoId);
+  const liveVideoUrl = useLocalVideoUrl(liveSlide?.kind === 'video' ? liveVideoId : null);
+
+  // A video starts playing when it goes on screen; going to another slide stops it.
+  const liveKey = live ? `${live.item.key}|${live.slide}|${liveVideoId}` : '';
+  useEffect(() => {
+    if (liveSlide?.kind === 'video' && liveVideoId) {
+      setTransport((t) => ({ id: liveVideoId, playing: true, position: 0, at: Date.now(), loop: !!liveSlide.loop, volume: t?.volume ?? 1 }));
+    } else setTransport(null);
+    setProgress(null);
+  }, [liveKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const channel = useRef<ReturnType<typeof openChannel>>();
   const seq = useRef(0);
@@ -142,7 +178,8 @@ export default function PresenterPage() {
 
   useEffect(() => {
     const ch = openChannel((m) => {
-      if (m.type === 'hello' || m.type === 'ping') setOutputSeen(Date.now());
+      if (m.type === 'hello' || m.type === 'ping') (m.from === 'stage' ? setStageSeen : setOutputSeen)(Date.now());
+      if (m.type === 'video') setProgress(m.progress);
       if (m.type === 'hello' && lastState.current) ch.post({ type: 'state', state: lastState.current });
     });
     channel.current = ch;
@@ -150,18 +187,34 @@ export default function PresenterPage() {
     return () => { window.clearInterval(t); ch.close(); };
   }, []);
   const outputConnected = Date.now() - outputSeen < 5000;
+  const stageConnected = Date.now() - stageSeen < 5000;
+
+  const stage = useMemo(() => {
+    if (!live || !liveItem) return { title: '', notes: '', next: null, nextTitle: '', message: stageMessage };
+    const n = nextSlide(items, live.planIndex, liveSlides, live.slide, slidesOf);
+    return {
+      title: itemTitle(liveItem, ctx),
+      notes: liveItem.notes || '',
+      next: n?.slide || null,
+      nextTitle: n?.item ? itemTitle(n.item, ctx) : '',
+      message: stageMessage,
+    };
+  }, [live, liveItem, items, liveSlides, slidesOf, ctx, stageMessage]);
 
   useEffect(() => {
     let cancelled = false;
     const s = ++seq.current;
     Promise.all([blobFor(liveSlide?.kind === 'image' ? liveSlide.image : null), blobFor(theme.background_image)]).then(([slideImage, background]) => {
       if (cancelled || s !== seq.current) return;
-      const state: LiveState = { slide: liveSlide, theme, mode, slideImage, background, seq: s };
+      const slide = liveSlide?.kind === 'video' ? { ...liveSlide, video: liveVideoId ?? undefined } : liveSlide;
+      const state: LiveState = {
+        slide, theme, mode, slideImage, background, backgroundVideo: backgroundVideoId, video: transport, camera, lowerThird, countdown, stage, seq: s,
+      };
       lastState.current = state;
       channel.current?.post({ type: 'state', state });
     });
     return () => { cancelled = true; };
-  }, [liveSlide, theme, mode, blobFor]);
+  }, [liveSlide, liveVideoId, theme, mode, blobFor, backgroundVideoId, transport, camera, lowerThird, countdown, stage]);
 
   const goLive = useCallback((item: PlanItem, planIndex: number | null, slide: number) => {
     setLive({ item, planIndex, slide });
@@ -189,6 +242,15 @@ export default function PresenterPage() {
   }, [live, liveSlides.length, items, slidesOf, goLive]);
 
   const toggle = (m: ScreenMode) => setMode((cur) => (cur === m ? 'show' : m));
+  const togglePlay = useCallback(() => {
+    setTransport((t) => {
+      if (!t) return t;
+      const duration = progress?.id === t.id ? progress.duration : 0;
+      const ended = !!(progress?.id === t.id && progress.ended && !t.loop);
+      const position = progress?.id === t.id && !t.playing ? progress.time : expectedPosition(t, duration);
+      return t.playing && !ended ? { ...t, playing: false, position, at: Date.now() } : { ...t, playing: true, position: ended ? 0 : position, at: Date.now() };
+    });
+  }, [progress]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -200,11 +262,12 @@ export default function PresenterPage() {
       else if (k === 'b' || k === 'B' || k === '.') toggle('black');
       else if (k === 'c' || k === 'C') toggle('clear');
       else if (k === 'l' || k === 'L') toggle('logo');
+      else if (k === 'p' || k === 'P') togglePlay();
       else if (k === 'Escape') setMode('show');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [step]);
+  }, [step, togglePlay]);
 
   // ---------------------------------------------------------------- plan editing
   const update = (next: PlanItem[]) => { setItems(next); setDirty(true); };
@@ -229,6 +292,7 @@ export default function PresenterPage() {
     if (live?.planIndex != null) setLive(live.planIndex === i ? { ...live, planIndex: null } : { ...live, planIndex: live.planIndex > i ? live.planIndex - 1 : live.planIndex });
   };
   const setThemeValue = (patch: Partial<Theme>) => { setTheme((t) => ({ ...t, ...patch })); if (plan.data) setDirty(true); };
+  const patchItem = (i: number, patch: Partial<PlanItem>) => update(items.map((it, k) => (k === i ? ({ ...it, ...patch } as PlanItem) : it)));
 
   const [saving, setSaving] = useState(false);
   const save = async () => {
@@ -252,7 +316,7 @@ export default function PresenterPage() {
   };
 
   // ---------------------------------------------------------------- dialogs
-  const [dialog, setDialog] = useState<null | 'plan' | 'song' | 'song-edit' | 'scripture' | 'text' | 'picture'>(null);
+  const [dialog, setDialog] = useState<null | 'plan' | 'song' | 'song-edit' | 'scripture' | 'text' | 'picture' | 'video' | 'videos'>(null);
   const [quickRef, setQuickRef] = useState('');
   const [quickError, setQuickError] = useState('');
   const showQuickScripture = () => {
@@ -269,6 +333,12 @@ export default function PresenterPage() {
   const selected = selectedItem ? slidesOf(selectedItem) : null;
   const selectedPlanIndex = selection?.source === 'plan' ? selection.index : null;
   const isLiveItem = (planIndex: number | null, item?: PlanItem) => !!live && (planIndex !== null ? live.planIndex === planIndex : live.item === item);
+  const showCamera = () => {
+    const item: PlanItem = { kind: 'camera', key: newKey() };
+    setSelection({ source: 'quick', item });
+    goLive(item, null, 0);
+  };
+  const selectedVideoMissing = selectedItem?.kind === 'video' && local.loaded && !localVideoOf(selectedItem);
 
   return (
     <div>
@@ -276,6 +346,10 @@ export default function PresenterPage() {
         crumbs={[{ label: 'Home', to: '/' }, { label: 'Media presentation' }]}
         actions={<>
           <Link to="/presentation/library"><Button variant="secondary" icon={<Library className="h-4 w-4" />}>Library</Button></Link>
+          <Button variant="secondary" icon={<Film className="h-4 w-4" />} onClick={() => setDialog('videos')}>Videos</Button>
+          <Button variant="secondary" icon={<Presentation className="h-4 w-4" />} onClick={() => openStageWindow()}>
+            {stageConnected ? 'Stage display open' : 'Stage display'}
+          </Button>
           <Button variant={outputConnected ? 'secondary' : 'gold'} icon={<MonitorPlay className="h-4 w-4" />} onClick={() => openOutputWindow()}>
             {outputConnected ? 'Projector open' : 'Open projector window'}
           </Button>
@@ -329,11 +403,13 @@ export default function PresenterPage() {
             })}
           </ol>
           {plan.data && canEdit && (
-            <div className="grid grid-cols-5 gap-1 border-t border-slate-100 p-2 dark:border-slate-800">
+            <div className="grid grid-cols-4 gap-1 border-t border-slate-100 p-2 dark:border-slate-800">
               <AddBtn icon={Music} label="Song" onClick={() => setDialog('song')} />
               <AddBtn icon={BookOpen} label="Scripture" onClick={() => setDialog('scripture')} />
               <AddBtn icon={Type} label="Text" onClick={() => setDialog('text')} />
               <AddBtn icon={ImageIcon} label="Picture" onClick={() => setDialog('picture')} />
+              <AddBtn icon={Film} label="Video" onClick={() => setDialog('video')} />
+              <AddBtn icon={Webcam} label="Camera" onClick={() => addItem({ kind: 'camera', key: newKey() })} />
               <AddBtn icon={Square} label="Blank" onClick={() => addItem({ kind: 'blank', key: newKey() })} />
             </div>
           )}
@@ -345,7 +421,7 @@ export default function PresenterPage() {
             <div className="flex h-full min-h-[18rem] flex-col items-center justify-center gap-2 text-center text-sm text-slate-500">
               <MonitorPlay className="h-8 w-8 text-slate-300" />
               <p>Pick an item on the left to see its slides. Click a slide to put it on the screen.</p>
-              <p className="text-xs">Keys: → or Space next · ← back · B black · C clear words · L logo · Esc show again</p>
+              <p className="text-xs">Keys: → or Space next · ← back · B black · C clear words · L logo · P play or pause a video · Esc show again</p>
             </div>
           ) : (
             <>
@@ -357,18 +433,35 @@ export default function PresenterPage() {
               </div>
               {selected?.loading && <p className="py-10 text-center text-sm text-slate-500">{selectedItem.kind === 'scripture' && bibleError ? bibleError : 'Loading…'}</p>}
               {selected?.error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{selected.error}</p>}
+              {selectedVideoMissing && selectedItem.kind === 'video' && (
+                <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                  <b>{selectedItem.name}</b> is not on this computer. Add the same file under <button type="button" className="font-semibold underline" onClick={() => setDialog('videos')}>Videos</button> and it will be found by its name.
+                </p>
+              )}
               <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
                 {selected?.slides.map((sl, si) => {
                   const on = isLiveItem(selectedPlanIndex, selectedItem) && live?.slide === si;
                   return (
                     <button key={si} onClick={() => goLive(selectedItem, selectedPlanIndex, si)}
                       className={clsx('group rounded-lg p-1 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-royal-500', on ? 'bg-red-500/90 ring-2 ring-red-500' : 'hover:bg-slate-100 dark:hover:bg-slate-800')}>
-                      <SlideView slide={sl} theme={theme} imageUrl={sl.image ? imageMap[sl.image]?.image : null} backgroundUrl={theme.background_image ? imageMap[theme.background_image]?.image : null} className="rounded-md" />
+                      <DeskSlide slide={sl} theme={theme} videoId={sl.kind === 'video' ? localVideoOf(selectedItem) : null} imageUrl={sl.image ? imageMap[sl.image]?.image : null} backgroundUrl={theme.background_image ? imageMap[theme.background_image]?.image : null} className="rounded-md" />
                       <span className={clsx('mt-1 block truncate px-0.5 text-[11px] font-medium', on ? 'text-white' : 'text-slate-500')}>{si + 1}{sl.label ? ` · ${sl.label}` : ''}</span>
                     </button>
                   );
                 })}
               </div>
+              {selection?.source === 'plan' && selectedItem.kind === 'video' && canEdit && (
+                <label className="mt-3 inline-flex items-center gap-1.5 text-sm">
+                  <input type="checkbox" checked={!!selectedItem.loop} onChange={(e) => patchItem(selection.index, { loop: e.target.checked })} />
+                  Repeat this video until I move on
+                </label>
+              )}
+              {selection?.source === 'plan' && (canEdit || selectedItem.notes) && (
+                <Field label="Notes for the preacher" hint="Shown on the stage display while this item is on screen, never on the projector." className="mt-3">
+                  <Textarea rows={3} value={selectedItem.notes || ''} readOnly={!canEdit} maxLength={2000}
+                    onChange={(e) => patchItem(selection.index, { notes: e.target.value })} placeholder="e.g. Sermon points, who speaks next, when to call the choir" />
+                </Field>
+              )}
             </>
           )}
         </section>
@@ -383,8 +476,13 @@ export default function PresenterPage() {
                 {outputConnected ? 'Projector connected' : 'Projector not open'}
               </span>
             </div>
-            <SlideView slide={liveSlide} theme={theme} mode={mode} className="rounded-md ring-1 ring-slate-300 dark:ring-slate-700"
-              imageUrl={liveSlide?.image ? imageMap[liveSlide.image]?.image : null} backgroundUrl={theme.background_image ? imageMap[theme.background_image]?.image : null} />
+            <SlideView slide={liveSlide?.kind === 'video' ? { ...liveSlide, video: liveVideoId ?? undefined } : liveSlide} theme={theme} mode={mode} className="rounded-md ring-1 ring-slate-300 dark:ring-slate-700"
+              imageUrl={liveSlide?.image ? imageMap[liveSlide.image]?.image : null} backgroundUrl={theme.background_image ? imageMap[theme.background_image]?.image : null}
+              videoUrl={liveVideoUrl} transport={transport} camera={camera} backgroundVideoUrl={backgroundVideoUrl} lowerThird={lowerThird}
+              countdown={countdown && countdown.where !== 'stage' ? countdown : null} />
+            {transport && liveSlide?.kind === 'video' && (
+              <VideoControls name={liveSlide.label || 'Video'} transport={transport} progress={progress?.id === transport.id ? progress : null} onChange={setTransport} />
+            )}
             <div className="mt-3 grid grid-cols-2 gap-2">
               <Button variant="secondary" icon={<ChevronLeft className="h-4 w-4" />} onClick={() => step(-1)}>Back</Button>
               <Button icon={<ChevronRight className="h-4 w-4" />} onClick={() => step(1)}>Next</Button>
@@ -395,6 +493,11 @@ export default function PresenterPage() {
               <Button size="sm" variant="secondary" aria-pressed={mode === 'logo'} onClick={() => toggle('logo')} title="L">Logo</Button>
             </div>
           </div>
+
+          <CameraPanel settings={camera} onChange={setCamera} onShow={showCamera} live={liveSlide?.kind === 'camera'} />
+          <LowerThirdPanel value={lowerThird} onShow={setLowerThird} onHide={() => setLowerThird(null)} />
+          <CountdownPanel value={countdown} onStart={setCountdown} onStop={() => setCountdown(null)} />
+          <StageMessagePanel value={stageMessage} onSend={setStageMessage} connected={stageConnected} />
 
           <div className="rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
             <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold"><BookOpen className="h-4 w-4 text-royal-600" />Quick scripture</p>
@@ -421,6 +524,19 @@ export default function PresenterPage() {
                 {(images.data?.results || []).filter((i) => i.kind === 'background').map((i) => <option key={i.id} value={i.id}>{i.title}</option>)}
               </Select>
             </Field>
+            <Field label="Moving background (video on this computer)" className="mt-3"
+              hint={theme.background_video && !backgroundVideoId ? `${theme.background_video_name || 'The chosen video'} is not on this computer.` : 'Loops silently behind the words, in place of the picture.'}>
+              <Select value={theme.background_video || ''} onChange={(e) => {
+                const v = local.videos.find((x) => x.id === e.target.value);
+                setThemeValue({ background_video: v?.id || null, background_video_name: v?.name || '' });
+              }}>
+                <option value="">None</option>
+                {theme.background_video && !local.videos.some((v) => v.id === theme.background_video) && (
+                  <option value={theme.background_video}>{theme.background_video_name || 'Missing video'}</option>
+                )}
+                {local.videos.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+              </Select>
+            </Field>
             <Field label={`Text size ${Math.round((theme.font_scale || 1) * 100)}%`} className="mt-3">
               <input type="range" min={0.7} max={1.4} step={0.05} value={theme.font_scale || 1} onChange={(e) => setThemeValue({ font_scale: Number(e.target.value) })} className="w-full accent-royal-600" />
             </Field>
@@ -440,6 +556,13 @@ export default function PresenterPage() {
       {dialog === 'text' && <TextDialog onClose={() => setDialog(null)} onAdd={(title, body) => { addItem({ kind: 'text', key: newKey(), title, body }); setDialog(null); }} />}
       {dialog === 'picture' && <PicturePicker images={(images.data?.results || [])} onClose={() => setDialog(null)} onPick={(img) => { addItem({ kind: 'image', key: newKey(), image: img.id }); setDialog(null); }} />}
       {dialog === 'song-edit' && selectedItem?.kind === 'song' && <SongForm songId={selectedItem.song} onClose={() => setDialog(null)} />}
+      {dialog === 'video' && <VideoLibrary videos={local.videos} onClose={() => setDialog(null)} onPick={(v) => { addItem({ kind: 'video', key: newKey(), video: v.id, name: v.name }); setDialog(null); }} />}
+      {dialog === 'videos' && <VideoLibrary videos={local.videos} onClose={() => setDialog(null)} onPick={(v) => {
+        const item: PlanItem = { kind: 'video', key: newKey(), video: v.id, name: v.name };
+        setSelection({ source: 'quick', item });
+        goLive(item, null, 0);
+        setDialog(null);
+      }} pickLabel="Play now" />}
     </div>
   );
 }

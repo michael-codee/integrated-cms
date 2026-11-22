@@ -43,6 +43,7 @@ const AuditPage = lazy(() => import('@/modules/admin/AuditPage'));
 const PresenterPage = lazy(() => import('@/modules/presentation/PresenterPage'));
 const MediaLibraryPage = lazy(() => import('@/modules/presentation/LibraryPage'));
 const ProjectorPage = lazy(() => import('@/modules/presentation/OutputPage'));
+const StagePage = lazy(() => import('@/modules/presentation/StagePage'));
 
 const s = (el: ReactNode) => <Suspense fallback={<PageLoader />}>{el}</Suspense>;
 const guarded = (perm: string | string[], el: ReactNode) => s(<RequirePerm perm={perm}>{el}</RequirePerm>);
@@ -60,8 +61,9 @@ export const router = createBrowserRouter([
   { path: '/login', element: s(<LoginPage />) },
   { path: '/forgot-password', element: s(<ForgotPasswordPage />) },
   { path: '/reset-password', element: s(<ResetPasswordPage />) },
-  // The projector window shows only what the control desk on the same computer sends it.
+  // The projector window and the stage display show only what the control desk on the same computer sends them.
   { path: '/presentation/output', element: s(<ProjectorPage />) },
+  { path: '/presentation/stage', element: s(<StagePage />) },
   {
     path: '/',
     element: <RequireAuth><Layout /></RequireAuth>,

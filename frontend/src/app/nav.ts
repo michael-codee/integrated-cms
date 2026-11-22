@@ -6,6 +6,11 @@ export interface NavItem {
   label: string;
   icon: LucideIcon;
   perm?: string | string[]; // any of
+  /**
+   * Load the page afresh instead of switching inside the app. The media pages need this: the camera is
+   * allowed only on pages that were loaded from a /presentation address (see vercel.json).
+   */
+  reload?: boolean;
 }
 
 export interface NavGroup {
@@ -40,8 +45,8 @@ export const NAV: NavGroup[] = [
   {
     label: 'Media',
     items: [
-      { to: '/presentation', label: 'Media presentation', icon: MonitorPlay, perm: 'media.view' },
-      { to: '/presentation/library', label: 'Song & picture library', icon: Library, perm: 'media.view' },
+      { to: '/presentation', label: 'Media presentation', icon: MonitorPlay, perm: 'media.view', reload: true },
+      { to: '/presentation/library', label: 'Song & picture library', icon: Library, perm: 'media.view', reload: true },
     ],
   },
   {

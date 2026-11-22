@@ -16,6 +16,7 @@
     { "source": "/api/(.*)", "destination": "/api/index?__prefix=api&path=$1" },
     { "source": "/django-admin/(.*)", "destination": "/api/index?__prefix=django-admin&path=$1" },
     { "source": "/static/(.*)", "destination": "/api/index?__prefix=static&path=$1" },
+    { "source": "/presentation(/.*)?", "destination": "/presentation.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "crons": [
@@ -29,12 +30,19 @@
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "X-Frame-Options", "value": "DENY" },
         { "key": "Referrer-Policy", "value": "same-origin" },
-        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" },
-        { "key": "Content-Security-Policy", "value": "default-src 'self'; img-src 'self' data: blob: https://*.tile.openstreetmap.org; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" }
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; img-src 'self' data: blob: https://*.tile.openstreetmap.org; style-src 'self' 'unsafe-inline'; font-src 'self' data:; media-src 'self' blob:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" }
       ]
     },
     {
-      "source": "/(sw.js|index.html|manifest.webmanifest|registerSW.js)",
+      "source": "/((?!presentation).*)",
+      "headers": [{ "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" }]
+    },
+    {
+      "source": "/presentation(.*)",
+      "headers": [{ "key": "Permissions-Policy", "value": "camera=(self), microphone=(self), geolocation=()" }]
+    },
+    {
+      "source": "/(sw.js|index.html|presentation.html|manifest.webmanifest|registerSW.js)",
       "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
     },
     {

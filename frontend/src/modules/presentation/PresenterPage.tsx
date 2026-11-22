@@ -14,6 +14,7 @@ import { DEFAULT_VERSION, loadBible, lookup, shortName, type Bible, type Transla
 import { useTranslations } from './bibleImport';
 import { TranslationsDialog } from './Translations';
 import { RemotePanel, useRemote, type RemoteCommand, type RemoteState } from './remote';
+import { DeskPhoneCamera, startDeskRelay, type CameraLinkStatus } from './phoneCamera';
 import { withLocalCopy } from './cache';
 import {
   expectedPosition, openChannel, openOutputWindow, openStageWindow, type CameraSettings, type Countdown, type LiveState, type LowerThird, type ScreenMode, type VideoProgress, type VideoTransport,
@@ -326,7 +327,18 @@ export default function PresenterPage() {
       }
     }
   };
-  const remote = useRemote(remoteState, onRemote);
+  // The phone's camera: set up through the remote's sync, passed on to the projector window locally.
+  const [phoneStatus, setPhoneStatus] = useState<CameraLinkStatus>('idle');
+  const phoneCam = useRef<DeskPhoneCamera | null>(null);
+  const remote = useRemote(remoteState, onRemote, (sig) => { phoneCam.current?.handle(sig); });
+  const { sendSignal } = remote;
+  useEffect(() => {
+    const cam = new DeskPhoneCamera(sendSignal, setPhoneStatus);
+    phoneCam.current = cam;
+    const stopRelay = startDeskRelay();
+    return () => { cam.close(); phoneCam.current = null; stopRelay(); };
+  }, [sendSignal]);
+  useEffect(() => { if (!remote.session) phoneCam.current?.close(); }, [remote.session]);
 
   // ---------------------------------------------------------------- plan editing
   const update = (next: PlanItem[]) => { setItems(next); setDirty(true); };
@@ -554,7 +566,7 @@ export default function PresenterPage() {
           </div>
 
           <RemotePanel remote={remote} />
-          <CameraPanel settings={camera} onChange={setCamera} onShow={showCamera} live={liveSlide?.kind === 'camera'} />
+          <CameraPanel settings={camera} onChange={setCamera} onShow={showCamera} live={liveSlide?.kind === 'camera'} phoneStatus={phoneStatus} />
           <LowerThirdPanel value={lowerThird} onShow={setLowerThird} onHide={() => setLowerThird(null)} />
           <CountdownPanel value={countdown} onStart={setCountdown} onStop={() => setCountdown(null)} />
           <StageMessagePanel value={stageMessage} onSend={setStageMessage} connected={stageConnected} />

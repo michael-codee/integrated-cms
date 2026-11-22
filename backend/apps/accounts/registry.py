@@ -203,6 +203,16 @@ DEFAULT_ROLES = [
         + _m("programs", ["view"]) + _m("notifications", ["view"]) + _m("sync", ["view", "create"]),
     },
     {
+        "code": "media_officer",
+        "name": "Media Officer",
+        "level": 6,
+        "description": "Leads the media ministry: runs the screens, keeps the song and picture library, "
+                       "approves and removes media, and pairs phones as remotes and cameras.",
+        "permissions": _m("dashboard", ["view"]) + _m("org", ["view"]) + _m("media", ACTIONS)
+        + _m("programs", ["view"]) + _m("departments", ["view"]) + _m("notifications", ["view", "create"])
+        + _m("sync", ["view", "create"]),
+    },
+    {
         "code": "membership_officer",
         "name": "Membership Officer",
         "level": 6,

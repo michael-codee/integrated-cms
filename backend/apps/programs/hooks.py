@@ -70,6 +70,15 @@ DEPARTMENTS = [("Youth Ministry", "youth"), ("Women's Fellowship", "women"), ("M
                ("Sunday School", "children"), ("Choir", "worship"), ("Evangelism Team", "evangelism")]
 
 
+def _demo_counts(rng, total):
+    """A plausible split of ``total`` by ministry category and by gender."""
+    men, women, youth, young = (int(total * rng.uniform(*r)) for r in ((.2, .26), (.3, .36), (.1, .15), (.1, .14)))
+    children = total - men - women - youth - young
+    male = men + int((children + youth + young) * rng.uniform(.42, .5))
+    return {"men": men, "women": women, "children": children, "youth": youth, "young_adults": young,
+            "male": male, "female": total - male}
+
+
 def generate_demo(rng: random.Random, members):
     from apps.attendance.models import AttendanceRecord
     from apps.configuration.models import ProgramCategory, ServiceType
@@ -80,7 +89,8 @@ def generate_demo(rng: random.Random, members):
 
     today = timezone.localdate()
     sunday = ServiceType.objects.get(code="sunday-service")
-    midweek = ServiceType.objects.get(code="midweek-service")
+    tuesday = ServiceType.objects.get(code="tuesday-bible-study")
+    friday = ServiceType.objects.get(code="friday-prayer-deliverance")
     special = ServiceType.objects.get(code="special-program")
     cats = {c.code: c for c in ProgramCategory.objects.all()}
     by_branch = {}
@@ -101,17 +111,14 @@ def generate_demo(rng: random.Random, members):
         day = today - datetime.timedelta(days=(today.weekday() + 1) % 7)  # last Sunday
         for w in range(26):
             d = day - datetime.timedelta(weeks=w)
-            ratio = rng.uniform(0.55, 0.85)
-            total = int(size * ratio)
-            men, women = int(total * 0.3), int(total * 0.42)
-            boys = (total - men - women) // 2
-            rows.append(AttendanceRecord(org_unit=branch, service_type=sunday, date=d, men=men, women=women, boys=boys,
-                                         girls=total - men - women - boys, visitors=rng.randint(0, 8),
-                                         first_timers=rng.randint(0, 5), new_converts=rng.randint(0, 3),
-                                         notes="[DEMO]", is_demo=True))
-            mid = int(total * rng.uniform(0.3, 0.45))
-            rows.append(AttendanceRecord(org_unit=branch, service_type=midweek, date=d - datetime.timedelta(days=4),
-                                         men=mid // 3, women=mid - mid // 3, notes="[DEMO]", is_demo=True))
+            total = int(size * rng.uniform(0.55, 0.85))
+            rows.append(AttendanceRecord(org_unit=branch, service_type=sunday, date=d, **_demo_counts(rng, total),
+                                         visitors=rng.randint(0, 8), first_timers=rng.randint(0, 5),
+                                         new_converts=rng.randint(0, 3), notes="[DEMO]", is_demo=True))
+            for service, back in ((tuesday, 5), (friday, 2)):
+                mid = int(total * rng.uniform(0.3, 0.45))
+                rows.append(AttendanceRecord(org_unit=branch, service_type=service, date=d - datetime.timedelta(days=back),
+                                             **_demo_counts(rng, mid), notes="[DEMO]", is_demo=True))
         AttendanceRecord.objects.bulk_create(rows)
         n += len(rows)
         for code, title, offset, days in (("revival", "Easter Revival", -120, 3), ("crusade", "Open-Air Crusade", -45, 2),
@@ -128,9 +135,8 @@ def generate_demo(rng: random.Random, members):
                 report_summary="[DEMO] Program held as planned." if past else "", description="[DEMO] fictional program")
             if past:
                 AttendanceRecord.objects.create(org_unit=branch, service_type=special, program=p, date=start.date(),
-                                                men=int(size * .4), women=int(size * .6), boys=int(size * .2),
-                                                girls=int(size * .2), visitors=rng.randint(10, 60), notes="[DEMO]",
-                                                is_demo=True)
+                                                **_demo_counts(rng, int(size * 1.4)),
+                                                visitors=rng.randint(10, 60), notes="[DEMO]", is_demo=True)
     return n
 
 

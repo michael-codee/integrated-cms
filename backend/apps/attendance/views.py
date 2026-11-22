@@ -42,7 +42,9 @@ class AttendanceViewSet(ExportMixin, ScopedModelViewSet):
     export_columns = [
         Column("date", "Date", 11), Column("org_unit.name", "Unit", 22), Column("service_type.name", "Service", 18),
         Column("men", "Men", 7, numeric=True), Column("women", "Women", 7, numeric=True),
-        Column("boys", "Boys", 7, numeric=True), Column("girls", "Girls", 7, numeric=True),
+        Column("children", "Children", 8, numeric=True), Column("youth", "Youth", 7, numeric=True),
+        Column("young_adults", "Young adults", 8, numeric=True),
+        Column("male", "Male", 7, numeric=True), Column("female", "Female", 7, numeric=True),
         Column("total", "Total", 8, numeric=True), Column("visitors", "Visitors", 8, numeric=True),
         Column("first_timers", "First timers", 9, numeric=True), Column("new_converts", "Converts", 8, numeric=True),
     ]

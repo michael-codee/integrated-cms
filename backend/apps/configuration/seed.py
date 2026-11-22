@@ -58,15 +58,18 @@ ASSET_CATEGORIES = [
 ]
 
 PROGRAM_CATEGORIES = [
-    "Sunday service", "Midweek service", "Prayer meeting", "Bible study", "Revival", "Crusade", "Evangelism",
+    ("sunday-service", "Sunday Divine Service"), ("tuesday-bible-study", "Tuesday Bible Studies"),
+    ("friday-prayer-deliverance", "Friday Prayer and Deliverance Service"), "Midweek service", "Prayer meeting", "Bible study", "Revival", "Crusade", "Evangelism",
     "Conference", "Convention", "Annual celebration", "Leadership meeting", "Ministerial training",
     "Baptism program", "Youth program", "Women's program", "Men's program", "Children's ministry program",
     "Community outreach", "Missionary activity", "Project",
 ]
 
+# The three weekly services come first; their codes are used by attendance analysis.
 SERVICE_TYPES = [
-    "Sunday service", "Midweek service", "Special program", "Conference", "Bible study", "Departmental meeting",
-    "Prayer meeting",
+    ("sunday-service", "Sunday Divine Service"), ("tuesday-bible-study", "Tuesday Bible Studies"),
+    ("friday-prayer-deliverance", "Friday Prayer and Deliverance Service"),
+    "Midweek service", "Special program", "Conference", "Bible study", "Departmental meeting", "Prayer meeting",
 ]
 
 DOCUMENT_CATEGORIES = [

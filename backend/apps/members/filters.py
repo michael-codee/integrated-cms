@@ -1,12 +1,12 @@
 import datetime
 
 import django_filters
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
 from apps.organization.models import OrgUnit
 
-from .models import Member
+from .models import DiscipleshipClass, DiscipleshipCompletion, Member
 
 
 def years_ago(n):
@@ -35,6 +35,8 @@ class WithinUnitFilter(django_filters.UUIDFilter):
 
 class MemberFilter(django_filters.FilterSet):
     org_unit = WithinUnitFilter()
+    discipleship_badge = django_filters.BooleanFilter(field_name="discipleship_badge_on", lookup_expr="isnull",
+                                                      exclude=True)
     joined_from = django_filters.DateFilter(field_name="joined_on", lookup_expr="gte")
     joined_to = django_filters.DateFilter(field_name="joined_on", lookup_expr="lte")
     age_min = django_filters.NumberFilter(method="filter_age_min")
@@ -82,3 +84,33 @@ def age_group_of(dob: datetime.date | None):
         if age >= lo and (hi is None or age <= hi):
             return label
     return "unknown"
+
+
+def _has_completed(course=None):
+    qs = DiscipleshipCompletion.objects.filter(member=OuterRef("pk"))
+    return Exists(qs.filter(course=course) if course else qs)
+
+
+class DiscipleshipRegisterFilter(MemberFilter):
+    PROGRESS = [("badge", "Badge of discipleship"), ("in_progress", "In progress"), ("not_started", "Not started")]
+
+    progress = django_filters.ChoiceFilter(choices=PROGRESS, method="filter_progress")
+    completed = django_filters.ChoiceFilter(choices=DiscipleshipClass.choices, method="filter_completed")
+    missing = django_filters.ChoiceFilter(choices=DiscipleshipClass.choices, method="filter_missing")
+    badge_from = django_filters.DateFilter(field_name="discipleship_badge_on", lookup_expr="gte")
+    badge_to = django_filters.DateFilter(field_name="discipleship_badge_on", lookup_expr="lte")
+
+    def filter_progress(self, qs, name, value):
+        if value == "badge":
+            return qs.filter(discipleship_badge_on__isnull=False)
+        if value == "in_progress":
+            return qs.filter(_has_completed(), discipleship_badge_on__isnull=True)
+        if value == "not_started":
+            return qs.filter(~_has_completed())
+        return qs
+
+    def filter_completed(self, qs, name, value):
+        return qs.filter(_has_completed(value))
+
+    def filter_missing(self, qs, name, value):
+        return qs.filter(~_has_completed(value))

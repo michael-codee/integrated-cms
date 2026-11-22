@@ -9,4 +9,8 @@ router.register("finance/transactions", views.TransactionViewSet, basename="fina
 router.register("finance/approval-policies", views.ApprovalPolicyViewSet, basename="approval-policy")
 router.register("finance/budgets", views.BudgetViewSet, basename="budget")
 router.register("finance/reconciliations", views.ReconciliationViewSet, basename="reconciliation")
-urlpatterns = [path("finance/summary/", views.FinanceSummaryView.as_view(), name="finance-summary")] + router.urls
+urlpatterns = [
+    path("finance/summary/", views.FinanceSummaryView.as_view(), name="finance-summary"),
+    path("finance/dues/register/", views.DuesRegisterView.as_view(), name="finance-dues-register"),
+    path("finance/dues/members/", views.DuesMemberSearchView.as_view(), name="finance-dues-members"),
+] + router.urls

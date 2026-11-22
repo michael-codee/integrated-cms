@@ -1,7 +1,7 @@
 import datetime
 
 from django.db import transaction
-from django.db.models import Avg, F, Sum
+from django.db.models import Avg, Sum
 from django.utils import timezone
 
 from apps.audit import services as audit
@@ -29,6 +29,7 @@ def _num(value):
 
 def compute_figures(template, unit, start, end):
     """Live figures for ``unit`` and everything below it for the period."""
+    from apps.attendance.models import TOTAL as ATTENDANCE_TOTAL
     from apps.attendance.models import AttendanceRecord
     from apps.finance.models import Transaction
     from apps.finance.services import totals
@@ -37,8 +38,7 @@ def compute_figures(template, unit, start, end):
 
     within = {"org_unit__path__startswith": unit.path}
     members = Member.objects.filter(**within)
-    att = AttendanceRecord.objects.filter(**within, date__range=(start, end)).annotate(
-        t=F("men") + F("women") + F("boys") + F("girls"))
+    att = AttendanceRecord.objects.filter(**within, date__range=(start, end)).annotate(t=ATTENDANCE_TOTAL)
     sunday = att.filter(service_type__code="sunday-service", program__isnull=True, department__isnull=True)
     att_agg = att.aggregate(total=Sum("t"), first=Sum("first_timers"), converts=Sum("new_converts"))
     fin = totals(Transaction.objects.filter(**within, transaction_date__range=(start, end)))

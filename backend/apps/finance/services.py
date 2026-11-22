@@ -3,6 +3,7 @@
 Views and the offline sync layer both go through these functions, so the
 same rules apply however a transaction arrives.
 """
+import datetime
 from decimal import Decimal
 
 from django.db import transaction as db_transaction
@@ -16,9 +17,10 @@ from apps.configuration.models import FinancialYear, SystemSetting
 from apps.core import scoping
 from apps.core.events import publish
 from apps.core.exceptions import BusinessRuleError
-from apps.organization.models import UNIT_RANK
+from apps.organization.models import StructureLevel
 
-from .models import (ApprovalLevel, ApprovalPolicy, Budget, Transaction, TransactionApproval, next_reference)
+from .models import (DUES_CATEGORY_CODE, MAX_DUES_MONTHS, ApprovalLevel, ApprovalPolicy, Budget, Transaction,
+                     TransactionApproval, add_months, month_range, next_reference)
 
 ZERO = Decimal("0")
 POSTED = [Transaction.Status.APPROVED, Transaction.Status.REVERSED]
@@ -89,7 +91,87 @@ def validate_entry(txn: Transaction, user):
     if txn.member_id and not (txn.member.org_unit.path.startswith(txn.org_unit.path)
                               or scoping.can(user, "members.view", txn.member.org_unit)):
         raise BusinessRuleError("That member is outside your jurisdiction.", code="member_scope")
+    validate_dues(txn)
     txn.financial_year = check_open_year(txn.transaction_date)
+
+
+def _month_label(month):
+    return month.strftime("%B %Y")
+
+
+def validate_dues(txn: Transaction):
+    """Rules for monthly membership dues entries.
+
+    Dues are ordinary income entries in the Membership dues category, so they
+    follow the income approval policy like any other receipt. On top of that
+    each one names the member and the months it pays for, and a month cannot
+    be paid twice while an earlier payment for it is awaiting approval or
+    approved.
+    """
+    if txn.reversal_of_id:
+        return  # a reversing entry cancels the original's months; it covers none itself
+    is_dues = txn.category.code == DUES_CATEGORY_CODE
+    if not is_dues:
+        if txn.dues_month or txn.dues_months:
+            raise BusinessRuleError("Only membership dues entries can name the months paid for.", code="dues_category")
+        return
+    if not txn.member_id:
+        raise BusinessRuleError("Choose the member who is paying dues.", code="dues_member")
+    if not txn.dues_month:
+        raise BusinessRuleError("Choose the first month this payment covers.", code="dues_month")
+    txn.dues_month = txn.dues_month.replace(day=1)
+    txn.dues_months = txn.dues_months or 1
+    if not 1 <= txn.dues_months <= MAX_DUES_MONTHS:
+        raise BusinessRuleError(f"Dues can be paid for 1 to {MAX_DUES_MONTHS} months at a time.", code="dues_months")
+    this_month = timezone.localdate().replace(day=1)
+    last = add_months(txn.dues_month, txn.dues_months - 1)
+    if last > add_months(this_month, MAX_DUES_MONTHS):
+        raise BusinessRuleError(f"Dues can be paid at most {MAX_DUES_MONTHS} months in advance.", code="dues_advance")
+    months = set(month_range(txn.dues_month, txn.dues_months))
+    others = Transaction.objects.filter(
+        member_id=txn.member_id, category__code=DUES_CATEGORY_CODE, reversal_of__isnull=True,
+        status__in=[Transaction.Status.SUBMITTED, Transaction.Status.APPROVED],
+        dues_month__lte=last, dues_month__gte=add_months(txn.dues_month, -MAX_DUES_MONTHS),
+    ).exclude(pk=txn.pk)
+    for other in others:
+        clash = sorted(months.intersection(other.dues_period))
+        if clash:
+            state = "approved" if other.status == Transaction.Status.APPROVED else "awaiting approval"
+            raise BusinessRuleError(
+                f"Dues for {_month_label(clash[0])} are already recorded for this member in {other.reference} "
+                f"({state}). If that entry is wrong, reverse it first.", code="dues_duplicate")
+
+
+def dues_register(members, year):
+    """Months paid per member for a calendar year.
+
+    Only approved dues count as paid; entries awaiting approval are shown as
+    pending. A payment for several months is spread evenly across them. A
+    reversed payment no longer counts.
+    """
+    start = datetime.date(year, 1, 1)
+    end = datetime.date(year, 12, 1)
+    member_ids = [m.pk for m in members]
+    rows = {m.pk: {"paid": [ZERO] * 12, "pending": [ZERO] * 12, "entries": []} for m in members}
+    qs = Transaction.objects.filter(
+        member_id__in=member_ids, category__code=DUES_CATEGORY_CODE, reversal_of__isnull=True,
+        status__in=[Transaction.Status.SUBMITTED, Transaction.Status.APPROVED],
+        dues_month__lte=end, dues_month__gte=add_months(start, -MAX_DUES_MONTHS),
+    ).only("id", "reference", "member_id", "amount", "currency_id", "status", "dues_month", "dues_months")
+    for t in qs:
+        period = t.dues_period
+        share = (t.amount / len(period)).quantize(Decimal("0.01"))
+        key = "paid" if t.status == Transaction.Status.APPROVED else "pending"
+        counted = False
+        for month in period:
+            if month.year == year:
+                rows[t.member_id][key][month.month - 1] += share
+                counted = True
+        if counted:
+            rows[t.member_id]["entries"].append({
+                "id": str(t.id), "reference": t.reference, "status": t.status, "amount": t.amount,
+                "currency": t.currency_id, "from": t.dues_month, "months": len(period)})
+    return rows
 
 
 # ---------------------------------------------------------------- approval routing
@@ -113,7 +195,8 @@ def approver_unit(org_unit, level):
     """The unit at which an approver must hold the approve permission."""
     if level == ApprovalLevel.SAME_UNIT:
         return org_unit
-    if UNIT_RANK[org_unit.unit_type] <= UNIT_RANK[level]:
+    ranks = dict(StructureLevel.objects.filter(code__in=[org_unit.unit_type, level]).values_list("code", "rank"))
+    if level in ranks and org_unit.unit_type in ranks and ranks[org_unit.unit_type] <= ranks[level]:
         return org_unit  # the unit itself is at or above that level
     return org_unit.ancestor_of_type(level) or org_unit
 
@@ -167,6 +250,11 @@ def submit(txn: Transaction, user):
         raise BusinessRuleError("Only drafts can be submitted.", code="not_draft")
     if not scoping.can(user, "finance.submit", txn.org_unit) and not scoping.can(user, "finance.create", txn.org_unit):
         raise BusinessRuleError("You cannot submit transactions for this unit.", code="forbidden", status_code=403)
+    if txn.member_id and txn.dues_month:
+        # Serialise dues submissions per member so two officers cannot both submit the same month.
+        from apps.members.models import Member
+
+        Member.all_objects.select_for_update().filter(pk=txn.member_id).exists()
     validate_entry(txn, user)
     applies = ApprovalPolicy.AppliesTo.REVERSAL if txn.reversal_of_id else txn.kind
     policy, steps = resolve_policy(applies, txn.org_unit, txn.amount, txn.currency_id)

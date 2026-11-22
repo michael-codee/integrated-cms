@@ -4,13 +4,14 @@ import { Plus, Trash2 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/app/AuthContext';
 import { Badge, Button, Card, CardBody, CardHeader, Checkbox, Field, FormError, FormGrid, Input, Modal, PageHeader, PageLoader, Select, Textarea, useToast } from '@/components/ui';
-import { UNIT_LABELS } from '@/lib/queries';
+import { useLevelLabels } from '@/lib/queries';
 import { money } from '@/lib/format';
 import { LEVELS, type Policy, type Step } from './types';
 
 const APPLIES: Record<Policy['applies_to'], string> = { income: 'Income', expense: 'Expenditure', reversal: 'Reversals' };
 
 function PolicyForm({ policy, onClose }: { policy: Policy | null; onClose: () => void }) {
+  const UNIT_LABELS = useLevelLabels();
   const [f, setF] = useState<Omit<Policy, 'id'>>(policy || { name: '', applies_to: 'expense', unit_type: '', min_amount: '0', max_amount: null, currency: 'SLE', priority: 100, is_active: true, description: '', steps: [{ order: 1, level: 'unit', label: '' }] });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -62,6 +63,7 @@ function PolicyForm({ policy, onClose }: { policy: Policy | null; onClose: () =>
 }
 
 export default function PoliciesPage() {
+  const UNIT_LABELS = useLevelLabels();
   const { can } = useAuth();
   const [editing, setEditing] = useState<Policy | null | 'new'>(null);
   const { data, isLoading } = useQuery({ queryKey: ['finance', 'policies'], queryFn: () => api<Policy[]>('/finance/approval-policies/') });

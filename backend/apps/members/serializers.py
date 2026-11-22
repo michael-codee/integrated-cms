@@ -2,9 +2,9 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from apps.core.files import SignedFilesMixin
-from apps.organization.models import OrgUnit
+from apps.organization.models import OrgUnit, member_level_codes
 
-from .models import BaptismRecord, Member, MembershipHistory, MemberTransfer
+from .models import BaptismRecord, DiscipleshipClass, DiscipleshipCompletion, Member, MembershipHistory, MemberTransfer
 
 
 class MemberSerializer(SignedFilesMixin, serializers.ModelSerializer):
@@ -23,10 +23,10 @@ class MemberSerializer(SignedFilesMixin, serializers.ModelSerializer):
             "category", "category_name", "status", "baptism_status", "baptism_date", "baptism_location",
             "marital_status", "occupation", "emergency_contact_name", "emergency_contact_phone", "photo",
             "photo_consent", "exit_date", "exit_reason", "notes", "is_demo", "version", "sync_seq", "created_at",
-            "updated_at", "client_created_at", "client_updated_at", "pending_transfer",
+            "updated_at", "client_created_at", "client_updated_at", "pending_transfer", "discipleship_badge_on",
         ]
         read_only_fields = ["membership_no", "status", "exit_date", "exit_reason", "is_demo", "version", "sync_seq",
-                            "created_at", "updated_at"]
+                            "created_at", "updated_at", "discipleship_badge_on"]
 
     def get_pending_transfer(self, obj):
         t = next((t for t in getattr(obj, "_pending_transfers", []) if t), None)
@@ -35,7 +35,7 @@ class MemberSerializer(SignedFilesMixin, serializers.ModelSerializer):
         return {"id": str(t.id), "to_unit_name": t.to_unit.name} if t else None
 
     def validate_org_unit(self, unit: OrgUnit):
-        if unit.unit_type not in ("branch", "congregation"):
+        if unit.unit_type not in member_level_codes():
             raise serializers.ValidationError("Choose a branch or congregation.")
         if unit.status != "active" and (not self.instance or self.instance.org_unit_id != unit.pk):
             raise serializers.ValidationError("This branch is not active.")
@@ -79,7 +79,7 @@ class MemberListSerializer(MemberSerializer):
     class Meta(MemberSerializer.Meta):
         fields = ["id", "membership_no", "full_name", "first_name", "last_name", "gender", "age", "date_of_birth",
                   "phone", "org_unit", "org_unit_name", "category", "category_name", "status", "baptism_status",
-                  "joined_on", "is_demo", "version", "photo"]
+                  "joined_on", "is_demo", "version", "photo", "discipleship_badge_on"]
 
 
 class MembershipHistorySerializer(serializers.ModelSerializer):
@@ -137,3 +137,51 @@ class StatusChangeSerializer(serializers.Serializer):
 class DecisionSerializer(serializers.Serializer):
     approve = serializers.BooleanField()
     note = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class DiscipleshipCompletionSerializer(serializers.ModelSerializer):
+    id = serializers.UUIDField(required=False)
+    course_name = serializers.CharField(source="get_course_display", read_only=True)
+    member_name = serializers.CharField(source="member.full_name", read_only=True)
+    membership_no = serializers.CharField(source="member.membership_no", read_only=True)
+    org_unit_name = serializers.CharField(source="org_unit.name", read_only=True)
+    recorded_by = serializers.CharField(source="created_by.full_name", read_only=True, default=None)
+
+    class Meta:
+        model = DiscipleshipCompletion
+        fields = ["id", "member", "member_name", "membership_no", "course", "course_name", "completed_on",
+                  "facilitator", "certificate_no", "notes", "org_unit", "org_unit_name", "recorded_by", "created_at",
+                  "version"]
+        read_only_fields = ["member", "org_unit", "created_at", "version"]
+
+    def validate_completed_on(self, value):
+        if value > timezone.localdate():
+            raise serializers.ValidationError("Completion date cannot be in the future.")
+        return value
+
+
+class DiscipleshipRegisterSerializer(serializers.ModelSerializer):
+    """One row per member: the date each class was completed (null while outstanding) and the badge."""
+
+    full_name = serializers.CharField(read_only=True)
+    org_unit_name = serializers.CharField(source="org_unit.name", read_only=True)
+    foundation_on = serializers.DateField(read_only=True)
+    discipleship_on = serializers.DateField(read_only=True)
+    spiritual_growth_on = serializers.DateField(read_only=True)
+    classes_completed = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Member
+        fields = ["id", "membership_no", "full_name", "gender", "org_unit", "org_unit_name", "status",
+                  "foundation_on", "discipleship_on", "spiritual_growth_on", "classes_completed",
+                  "discipleship_badge_on", "is_demo"]
+
+    def get_classes_completed(self, obj) -> int:
+        return sum(1 for k in ("foundation_on", "discipleship_on", "spiritual_growth_on") if getattr(obj, k, None))
+
+
+class RemoveCompletionSerializer(serializers.Serializer):
+    reason = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+DISCIPLESHIP_CLASSES = [{"value": v, "label": label} for v, label in DiscipleshipClass.choices]

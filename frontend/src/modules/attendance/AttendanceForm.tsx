@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { api, ApiError, type Page } from '@/lib/api';
@@ -10,11 +10,18 @@ import { UnitSelect } from '@/components/UnitSelect';
 import { useLookup, usePublicSettings } from '@/lib/queries';
 import { today } from '@/lib/format';
 import { useDepartments } from '@/modules/departments/useDepartments';
-import type { AttendanceRecord } from './types';
+import { GENDERS, MINISTRIES, WEEKLY_SERVICES, type AttendanceRecord } from './types';
 
-const COUNTS = [['men', 'Men'], ['women', 'Women'], ['boys', 'Boys'], ['girls', 'Girls']] as const;
+const COUNTS = [...MINISTRIES, ...GENDERS];
 const EXTRA = [['visitors', 'Visitors (included above)'], ['first_timers', 'First-time guests'], ['new_converts', 'New converts']] as const;
 type CountKey = (typeof COUNTS)[number][0] | (typeof EXTRA)[number][0];
+const isHeadCount = (k: string) => COUNTS.some(([c]) => c === k);
+
+/** The weekly service usually held on this date's weekday, if any. */
+function weeklyServiceCode(iso: string) {
+  const day = new Date(`${iso}T12:00:00`).getDay();
+  return WEEKLY_SERVICES.find((w) => w.day === day)?.code;
+}
 
 export interface AttendancePreset { org_unit?: string; program?: string; program_title?: string; department?: string | null; date?: string }
 
@@ -31,7 +38,7 @@ export function AttendanceForm({ record, preset, onClose }: { record?: Attendanc
     org_unit: record?.org_unit || preset?.org_unit || '', service_type: record?.service_type || '', date: record?.date || preset?.date || today(),
     department: record?.department || preset?.department || '', notes: record?.notes || '',
   }));
-  const [counts, setCounts] = useState<Record<CountKey, string>>(() => Object.fromEntries([...COUNTS, ...EXTRA].map(([k]) => [k, record ? String(record.is_individual && (k === 'men' || k === 'women' || k === 'boys' || k === 'girls') ? 0 : record[k]) : ''])) as Record<CountKey, string>);
+  const [counts, setCounts] = useState<Record<CountKey, string>>(() => Object.fromEntries([...COUNTS, ...EXTRA].map(([k]) => [k, record ? String(record.is_individual && isHeadCount(k) ? 0 : record[k]) : ''])) as Record<CountKey, string>);
   const [present, setPresent] = useState<Map<string, Pick>>(new Map());
   const [search, setSearch] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -55,23 +62,35 @@ export function AttendanceForm({ record, preset, onClose }: { record?: Attendanc
   });
   const set = (k: keyof typeof f, v: string) => setF((p) => ({ ...p, [k]: v }));
   const n = (k: CountKey) => Number(counts[k] || 0);
-  const headTotal = COUNTS.reduce((s, [k]) => s + n(k), 0);
+  const headTotal = MINISTRIES.reduce((s, [k]) => s + n(k), 0);
+  const genderTotal = GENDERS.reduce((s, [k]) => s + n(k), 0);
   const total = mode === 'register' ? present.size + headTotal : headTotal;
+  const activeServices = useMemo(() => {
+    const weekly: string[] = WEEKLY_SERVICES.map((w) => w.code);
+    const rank = (code: string) => (weekly.includes(code) ? weekly.indexOf(code) : weekly.length);
+    return (services.data || []).filter((s) => s.is_active || s.id === f.service_type).sort((a, b) => rank(a.code) - rank(b.code));
+  }, [services.data, f.service_type]);
+  const weeklyIds = new Set(activeServices.filter((s) => WEEKLY_SERVICES.some((w) => w.code === s.code)).map((s) => s.id));
+  // A new record defaults to the weekly service held on the chosen day (Tuesday, Friday or Sunday).
+  const [serviceTouched, setServiceTouched] = useState(!!record);
+  const suggested = activeServices.find((s) => s.code === weeklyServiceCode(f.date))?.id;
+  const serviceType = !serviceTouched && !program && !f.service_type && suggested ? suggested : f.service_type;
   const toggle = (m: Pick) => setPresent((p) => { const next = new Map(p); if (next.has(m.id)) next.delete(m.id); else next.set(m.id, m); return next; });
   const allShown = useMemo(() => (roster.data || []).every((m) => present.has(m.id)), [roster.data, present]);
 
   const save = async () => {
     const e: Record<string, string> = {};
     if (!f.org_unit) e.org_unit = 'Choose the unit.';
-    if (!f.service_type) e.service_type = 'Choose the service or meeting type.';
+    if (!serviceType) e.service_type = 'Choose the service or meeting type.';
     if (!f.date) e.date = 'Enter the date.';
     if (f.date > today()) e.date = 'Attendance cannot be recorded for a future date.';
     if (total === 0) e.form = mode === 'register' ? 'Mark at least one member present or enter visitor counts.' : 'Enter at least one count.';
+    if (genderTotal !== headTotal) e.male = `Male + female (${genderTotal}) must equal the ministry total (${headTotal}).`;
     if (mode === 'counts' && n('visitors') > headTotal) e.visitors = 'Visitors are part of the totals above.';
     setErrors(e);
     if (Object.keys(e).length) return;
     setBusy(true);
-    const body: Record<string, unknown> = { ...f, department: f.department || null, program, ...Object.fromEntries(Object.entries(counts).map(([k, v]) => [k, Number(v || 0)])) };
+    const body: Record<string, unknown> = { ...f, service_type: serviceType, department: f.department || null, program, ...Object.fromEntries(Object.entries(counts).map(([k, v]) => [k, Number(v || 0)])) };
     if (mode === 'register') body.present_members = [...present.keys()];
     const id = record?.id || uuid();
     try {
@@ -103,8 +122,10 @@ export function AttendanceForm({ record, preset, onClose }: { record?: Attendanc
       <FormGrid cols={2}>
         <Field label="Unit" required error={errors.org_unit}><UnitSelect value={f.org_unit} onChange={(v) => { set('org_unit', v); set('department', ''); setPresent(new Map()); }} placeholder="Choose unit" invalid={!!errors.org_unit} /></Field>
         <Field label="Service or meeting" required error={errors.service_type}>
-          <Select value={f.service_type} onChange={(e) => set('service_type', e.target.value)} invalid={!!errors.service_type}>
-            <option value="">Choose</option>{(services.data || []).filter((s) => s.is_active).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          <Select value={serviceType} onChange={(e) => { setServiceTouched(true); set('service_type', e.target.value); }} invalid={!!errors.service_type}>
+            <option value="">Choose</option>
+            {weeklyIds.size > 0 && <optgroup label="Weekly services">{activeServices.filter((s) => weeklyIds.has(s.id)).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</optgroup>}
+            <optgroup label={weeklyIds.size ? 'Other gatherings' : 'Services and meetings'}>{activeServices.filter((s) => !weeklyIds.has(s.id)).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</optgroup>
           </Select>
         </Field>
         <Field label="Date" required error={errors.date}><Input type="date" max={today()} value={f.date} onChange={(e) => set('date', e.target.value)} /></Field>
@@ -143,14 +164,38 @@ export function AttendanceForm({ record, preset, onClose }: { record?: Attendanc
           </div>
         ) : <p className="mb-4 rounded-lg bg-gold-50 p-3 text-sm text-gold-900 dark:bg-gold-900/30 dark:text-gold-100">The member register needs a connection. Use the head count while offline.</p>
       )}
-      <p className="mb-2 text-xs font-medium text-slate-600 dark:text-slate-300">{mode === 'register' ? 'Others present who are not on the register (visitors, children not registered)' : 'Head count'}</p>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {COUNTS.map(([k, l]) => <Field key={k} label={l} error={errors[k]}><Input type="number" inputMode="numeric" min="0" value={counts[k]} onChange={(e) => setCounts((c) => ({ ...c, [k]: e.target.value }))} placeholder="0" /></Field>)}
-      </div>
+      {mode === 'register' && <p className="mb-2 text-xs font-medium text-slate-600 dark:text-slate-300">Others present who are not on the register (visitors, children not registered). Members ticked above are counted under their ministry and gender automatically.</p>}
+      <CountGroup title="By ministry" subtotal={headTotal}>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          {MINISTRIES.map(([k, l]) => <CountInput key={k} k={k} label={l} value={counts[k]} error={errors[k]} onChange={(v) => setCounts((c) => ({ ...c, [k]: v }))} />)}
+        </div>
+      </CountGroup>
+      <CountGroup title="By gender" subtotal={genderTotal} mismatch={genderTotal !== headTotal && (genderTotal > 0 || headTotal > 0) ? `Should equal the ministry total of ${headTotal.toLocaleString()}` : undefined} error={errors.male}>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          {GENDERS.map(([k, l]) => <CountInput key={k} k={k} label={l} value={counts[k]} onChange={(v) => setCounts((c) => ({ ...c, [k]: v }))} />)}
+        </div>
+      </CountGroup>
       <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {EXTRA.map(([k, l]) => <Field key={k} label={l} error={errors[k]}><Input type="number" inputMode="numeric" min="0" value={counts[k]} onChange={(e) => setCounts((c) => ({ ...c, [k]: e.target.value }))} placeholder="0" /></Field>)}
+        {EXTRA.map(([k, l]) => <CountInput key={k} k={k} label={l} value={counts[k]} error={errors[k]} onChange={(v) => setCounts((c) => ({ ...c, [k]: v }))} />)}
       </div>
       <Field label="Notes" className="mt-3"><Textarea rows={2} value={f.notes} onChange={(e) => set('notes', e.target.value)} /></Field>
     </Modal>
+  );
+}
+
+function CountInput({ k, label, value, error, onChange }: { k: string; label: string; value: string; error?: string; onChange: (v: string) => void }) {
+  return <Field label={label} error={error}><Input name={k} type="number" inputMode="numeric" min="0" value={value} onChange={(e) => onChange(e.target.value)} placeholder="0" /></Field>;
+}
+
+function CountGroup({ title, subtotal, mismatch, error, children }: { title: string; subtotal: number; mismatch?: string; error?: string; children: ReactNode }) {
+  return (
+    <fieldset className="mb-3 rounded-lg p-3 ring-1 ring-slate-200 dark:ring-slate-700">
+      <legend className="flex w-full items-baseline gap-2 px-1 text-xs font-medium text-slate-600 dark:text-slate-300">
+        <span>{title}</span>
+        <span className="ml-auto tabular-nums">Subtotal <strong>{subtotal.toLocaleString()}</strong></span>
+      </legend>
+      {children}
+      {(error || mismatch) && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{error || mismatch}</p>}
+    </fieldset>
   );
 }

@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { ArrowRightLeft, Bell, FileBarChart, FolderOpen, RefreshCcw, Boxes, CalendarCheck, CalendarDays, HandHeart, Megaphone, Building2, ClipboardCheck, KeyRound, Landmark, LayoutDashboard, Library, ListChecks, MonitorPlay, PiggyBank, Receipt, ScrollText, Settings, ShieldCheck, UserRoundCheck, Users } from 'lucide-react';
+import { ArrowRightLeft, Bell, FileBarChart, FolderOpen, HandCoins, RefreshCcw, Boxes, CalendarCheck, CalendarDays, HandHeart, Megaphone, Building2, ClipboardCheck, GraduationCap, KeyRound, Landmark, LayoutDashboard, Library, ListChecks, MonitorPlay, PiggyBank, Receipt, ScrollText, Settings, ShieldCheck, UserRoundCheck, Users } from 'lucide-react';
 
 export interface NavItem {
   to: string;
@@ -23,6 +23,7 @@ export const NAV: NavGroup[] = [
     items: [
       { to: '/structure', label: 'Church structure', icon: Building2, perm: 'org.view' },
       { to: '/members', label: 'Membership', icon: UserRoundCheck, perm: 'members.view' },
+      { to: '/members/discipleship', label: 'Discipleship register', icon: GraduationCap, perm: 'members.view' },
       { to: '/members/transfers', label: 'Member transfers', icon: ArrowRightLeft, perm: 'members.view' },
     ],
   },
@@ -55,6 +56,7 @@ export const NAV: NavGroup[] = [
     items: [
       { to: '/finance', label: 'Finance overview', icon: Landmark, perm: 'finance.view' },
       { to: '/finance/transactions', label: 'Transactions', icon: Receipt, perm: 'finance.view' },
+      { to: '/finance/dues', label: 'Monthly dues', icon: HandCoins, perm: 'finance.view' },
       { to: '/finance/approvals', label: 'Approvals', icon: ClipboardCheck, perm: ['finance.approve', 'budgets.approve'] },
       { to: '/finance/budgets', label: 'Budgets', icon: PiggyBank, perm: 'budgets.view' },
       { to: '/finance/accounts', label: 'Accounts', icon: ListChecks, perm: 'finance.view' },

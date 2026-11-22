@@ -1,14 +1,22 @@
 """Service and program attendance.
 
 Each record is one gathering (service type + date, optionally a program or a
-department meeting) at one unit, with head counts. Branches that keep a
-register can also mark individual members present; the counts are then
-derived from the marked members plus visitors.
+department meeting) at one unit, with head counts. The count is captured twice:
+by ministry category (Men, Women, Children, Youth, Young Adults) and by gender
+(male, female). Both breakdowns describe the same people, so they add up to the
+same total. Branches that keep a register can also mark individual members
+present; the counts are then derived from the marked members plus visitors.
 """
 from django.db import models
+from django.db.models import F
 from django.utils import timezone
 
 from apps.core.models import BaseModel, SyncModel
+
+
+MINISTRY_FIELDS = ("men", "women", "children", "youth", "young_adults")
+GENDER_FIELDS = ("male", "female")
+TOTAL = F("men") + F("women") + F("children") + F("youth") + F("young_adults")
 
 
 class AttendanceRecord(SyncModel):
@@ -19,10 +27,15 @@ class AttendanceRecord(SyncModel):
     department = models.ForeignKey("departments.Department", null=True, blank=True, on_delete=models.PROTECT,
                                    related_name="attendance_records")
     date = models.DateField(default=timezone.localdate, db_index=True)
-    men = models.PositiveIntegerField(default=0)
-    women = models.PositiveIntegerField(default=0)
-    boys = models.PositiveIntegerField(default=0)
-    girls = models.PositiveIntegerField(default=0)
+    # By ministry category.
+    men = models.PositiveIntegerField(default=0, help_text="Men's ministry")
+    women = models.PositiveIntegerField(default=0, help_text="Women's ministry")
+    children = models.PositiveIntegerField(default=0)
+    youth = models.PositiveIntegerField(default=0)
+    young_adults = models.PositiveIntegerField(default=0)
+    # By gender: the same people again, so male + female equals the total.
+    male = models.PositiveIntegerField(default=0)
+    female = models.PositiveIntegerField(default=0)
     visitors = models.PositiveIntegerField(default=0, help_text="Included in the counts above")
     first_timers = models.PositiveIntegerField(default=0)
     new_converts = models.PositiveIntegerField(default=0)
@@ -43,16 +56,8 @@ class AttendanceRecord(SyncModel):
         ]
 
     @property
-    def adults(self):
-        return self.men + self.women
-
-    @property
-    def children(self):
-        return self.boys + self.girls
-
-    @property
     def total(self):
-        return self.men + self.women + self.boys + self.girls
+        return self.men + self.women + self.children + self.youth + self.young_adults
 
 
 class AttendanceEntry(BaseModel):

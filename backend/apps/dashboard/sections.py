@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from django.db.models import Count, Q
 
 from apps.core import scoping
-from apps.organization.models import OrgUnit
+from apps.organization.models import ROOT_LEVEL, OrgUnit, StructureLevel, member_level_codes
 
 
 @dataclass
@@ -62,9 +62,15 @@ def structure_section(user, ctx: Context):
          "latitude": float(u.latitude) if u.latitude is not None else None,
          "longitude": float(u.longitude) if u.longitude is not None else None,
          "members": counts_by_unit.get(u.id, 0)}
-        for u in units.filter(unit_type__in=["branch", "congregation"]).order_by("name")
+        for u in units.filter(unit_type__in=member_level_codes()).order_by("name")
     ]
-    return {**counts, "branch_list": branches}
+    active_by_level = dict(units.filter(status="active").values_list("unit_type").annotate(n=Count("id"))
+                           .values_list("unit_type", "n"))
+    levels = [{"code": lvl.code, "name": lvl.name, "plural_name": lvl.plural_name or lvl.name,
+               "active": active_by_level.get(lvl.code, 0)}
+              for lvl in StructureLevel.objects.exclude(code=ROOT_LEVEL)
+              if lvl.is_active or active_by_level.get(lvl.code)]
+    return {**counts, "levels": levels, "branch_list": branches}
 
 
 @section("membership", "members.view")

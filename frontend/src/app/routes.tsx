@@ -13,6 +13,7 @@ const StructurePage = lazy(() => import('@/modules/structure/StructurePage'));
 const MembersPage = lazy(() => import('@/modules/members/MembersPage'));
 const MemberDetailPage = lazy(() => import('@/modules/members/MemberDetailPage'));
 const TransfersPage = lazy(() => import('@/modules/members/TransfersPage'));
+const DiscipleshipPage = lazy(() => import('@/modules/members/DiscipleshipPage'));
 const FinanceOverviewPage = lazy(() => import('@/modules/finance/FinanceOverviewPage'));
 const TransactionsPage = lazy(() => import('@/modules/finance/TransactionsPage'));
 const TransactionDetailPage = lazy(() => import('@/modules/finance/TransactionDetailPage'));
@@ -20,6 +21,7 @@ const FinanceApprovalsPage = lazy(() => import('@/modules/finance/ApprovalsPage'
 const BudgetsPage = lazy(() => import('@/modules/finance/BudgetsPage'));
 const AccountsPage = lazy(() => import('@/modules/finance/AccountsPage'));
 const PoliciesPage = lazy(() => import('@/modules/finance/PoliciesPage'));
+const DuesPage = lazy(() => import('@/modules/finance/DuesPage'));
 const AssetsPage = lazy(() => import('@/modules/assets/AssetsPage'));
 const AssetDetailPage = lazy(() => import('@/modules/assets/AssetDetailPage'));
 const AssetApprovalsPage = lazy(() => import('@/modules/assets/AssetApprovalsPage'));
@@ -69,6 +71,7 @@ export const router = createBrowserRouter([
       { path: 'structure', element: guarded('org.view', <StructurePage />) },
       { path: 'members', element: guarded('members.view', <MembersPage />) },
       { path: 'members/transfers', element: guarded('members.view', <TransfersPage />) },
+      { path: 'members/discipleship', element: guarded('members.view', <DiscipleshipPage />) },
       { path: 'members/:id', element: guarded('members.view', <MemberDetailPage />) },
       { path: 'finance', element: guarded('finance.view', <FinanceOverviewPage />) },
       { path: 'finance/transactions', element: guarded('finance.view', <TransactionsPage />) },
@@ -77,6 +80,7 @@ export const router = createBrowserRouter([
       { path: 'finance/budgets', element: guarded('budgets.view', <BudgetsPage />) },
       { path: 'finance/accounts', element: guarded('finance.view', <AccountsPage />) },
       { path: 'finance/rules', element: guarded('finance.view', <PoliciesPage />) },
+      { path: 'finance/dues', element: guarded('finance.view', <DuesPage />) },
       { path: 'assets', element: guarded('assets.view', <AssetsPage />) },
       { path: 'assets/approvals', element: guarded('assets.approve', <AssetApprovalsPage />) },
       { path: 'assets/:id', element: guarded('assets.view', <AssetDetailPage />) },

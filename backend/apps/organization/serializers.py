@@ -1,22 +1,18 @@
 import copy
 import re
 
+from django.db.models import Q
+
 from rest_framework import serializers
 
-from .models import OrgUnit, OrgUnitHistory, UnitType
-
-PREFIX = {
-    UnitType.HEADQUARTERS: "HQ",
-    UnitType.REGION: "RG",
-    UnitType.DISTRICT: "DT",
-    UnitType.BRANCH: "BR",
-    UnitType.CONGREGATION: "CG",
-}
+from .models import OrgUnit, OrgUnitHistory, StructureLevel
 
 
 def generate_code(unit_type, name):
     letters = re.sub(r"[^A-Z]", "", name.upper())[:3] or "XXX"
-    prefix = f"{PREFIX[unit_type]}-{letters}"
+    level = StructureLevel.objects.filter(code=unit_type).first()
+    head = (level.code_prefix if level and level.code_prefix else (unit_type or "U")[:2]).upper()
+    prefix = f"{head}-{letters}"
     n = 1
     while True:
         code = f"{prefix}-{n:03d}"
@@ -89,3 +85,64 @@ class OrgUnitHistorySerializer(serializers.ModelSerializer):
     class Meta:
         model = OrgUnitHistory
         fields = ["id", "event", "changes", "note", "by", "created_at"]
+
+
+class StructureLevelSerializer(serializers.ModelSerializer):
+    is_system = serializers.BooleanField(read_only=True)
+    unit_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = StructureLevel
+        fields = ["id", "code", "name", "plural_name", "rank", "code_prefix", "holds_members", "icon",
+                  "description", "is_active", "is_system", "unit_count"]
+
+    def get_unit_count(self, obj):
+        counts = self.context.get("unit_counts")
+        if counts is None:
+            return OrgUnit.objects.filter(unit_type=obj.code).count()
+        return counts.get(obj.code, 0)
+
+    def validate_code(self, value):
+        value = (value or "").strip().lower().replace("-", "_")
+        if self.instance and value != self.instance.code:
+            raise serializers.ValidationError("A level's code cannot be changed once created.")
+        if not re.fullmatch(r"[a-z][a-z0-9_]{1,19}", value):
+            raise serializers.ValidationError("Use 2-20 lowercase letters, digits or underscores, starting with a letter.")
+        return value
+
+    def validate_code_prefix(self, value):
+        value = re.sub(r"[^A-Z0-9]", "", (value or "").upper())
+        if not value:
+            raise serializers.ValidationError("Enter a short prefix such as ZN.")
+        return value[:4]
+
+    def validate(self, attrs):
+        inst = self.instance
+        if "name" in attrs and not (attrs.get("plural_name") or getattr(inst, "plural_name", "")):
+            attrs["plural_name"] = attrs["name"] if attrs["name"].endswith("s") else f"{attrs['name']}s"
+        code = attrs.get("code", getattr(inst, "code", None))
+        rank = attrs.get("rank", getattr(inst, "rank", None))
+        root = code == "headquarters"
+        if root and rank != 0:
+            raise serializers.ValidationError({"rank": "Headquarters is always the top level."})
+        if not root and (rank is None or rank <= 0):
+            raise serializers.ValidationError({"rank": "Only headquarters can be at the top; choose a position below it."})
+        if inst and inst.is_system and attrs.get("is_active") is False:
+            raise serializers.ValidationError({"is_active": f"{inst.name} is a system level and is always in use."})
+        if inst and rank != inst.rank:
+            self._check_rank_change(inst, rank)
+        return attrs
+
+    def _check_rank_change(self, level, new_rank):
+        """Moving a level must keep every existing parent above its children."""
+        ranks = dict(StructureLevel.objects.values_list("code", "rank"))
+        ranks[level.code] = new_rank
+        pairs = (OrgUnit.objects.filter(parent__isnull=False)
+                 .filter(Q(unit_type=level.code) | Q(parent__unit_type=level.code))
+                 .values_list("parent__unit_type", "unit_type").distinct())
+        for parent_type, child_type in pairs:
+            if ranks.get(parent_type, 0) >= ranks.get(child_type, 0):
+                raise serializers.ValidationError({"rank": (
+                    f"Existing {StructureLevel.objects.get(code=child_type).name} units sit under "
+                    f"{StructureLevel.objects.get(code=parent_type).name} units, so this position would break "
+                    "the current structure. Move those units first.")})

@@ -72,6 +72,10 @@ class Member(SyncModel):
     notes = models.TextField(blank=True, default="")
     is_demo = models.BooleanField(default=False, db_index=True,
                                   help_text="Fictional demonstration record (never present in production).")
+    discipleship_badge_on = models.DateField(
+        null=True, blank=True, db_index=True,
+        help_text="Date the badge of discipleship was earned: set automatically once all three discipleship "
+                  "classes are completed.")
 
     class Meta:
         ordering = ["last_name", "first_name"]
@@ -97,7 +101,9 @@ class Member(SyncModel):
         return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
     def clean(self):
-        if self.org_unit_id and self.org_unit.unit_type not in ("branch", "congregation"):
+        from apps.organization.models import member_level_codes
+
+        if self.org_unit_id and self.org_unit.unit_type not in member_level_codes():
             raise ValidationError({"org_unit": "Members belong to a branch or congregation."})
         if self.date_of_birth and self.date_of_birth > timezone.localdate():
             raise ValidationError({"date_of_birth": "Date of birth cannot be in the future."})
@@ -124,6 +130,10 @@ class MembershipHistory(BaseModel):
         EXITED = "exited"
         DEPARTMENT_JOINED = "department_joined"
         DEPARTMENT_LEFT = "department_left"
+        CLASS_COMPLETED = "class_completed"
+        CLASS_REMOVED = "class_removed"
+        BADGE_AWARDED = "badge_awarded"
+        BADGE_REVOKED = "badge_revoked"
 
     member = models.ForeignKey(Member, on_delete=models.PROTECT, related_name="history")
     event = models.CharField(max_length=24, choices=Event.choices, db_index=True)
@@ -174,3 +184,33 @@ class MemberTransfer(SyncModel):
             models.UniqueConstraint(fields=["member"], condition=models.Q(status="pending", is_deleted=False),
                                     name="one_pending_transfer_per_member"),
         ]
+
+
+class DiscipleshipClass(models.TextChoices):
+    """The three classes of the discipleship pathway, in the order they are normally taken."""
+    FOUNDATION = "foundation", "Foundation Class"
+    DISCIPLESHIP = "discipleship", "Discipleship Class"
+    SPIRITUAL_GROWTH = "spiritual_growth", "Spiritual Growth Class"
+
+
+class DiscipleshipCompletion(SyncModel):
+    """One row per member per class completed. Completing all three earns the badge of discipleship."""
+
+    member = models.ForeignKey(Member, on_delete=models.PROTECT, related_name="discipleship_completions")
+    org_unit = models.ForeignKey("organization.OrgUnit", on_delete=models.PROTECT, related_name="+",
+                                 help_text="Branch where the class was completed")
+    course = models.CharField(max_length=20, choices=DiscipleshipClass.choices, db_index=True)
+    completed_on = models.DateField()
+    facilitator = models.CharField(max_length=160, blank=True, default="")
+    certificate_no = models.CharField(max_length=60, blank=True, default="")
+    notes = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ["member", "completed_on"]
+        constraints = [
+            models.UniqueConstraint(fields=["member", "course"], condition=models.Q(is_deleted=False),
+                                    name="one_completion_per_member_per_class"),
+        ]
+
+    def __str__(self):
+        return f"{self.member.full_name}: {self.get_course_display()} ({self.completed_on})"

@@ -25,6 +25,8 @@ from apps.core.uploads import RandomName, document_validator, image_validator
 from apps.core.models import BaseModel, SoftDeleteModel, SyncModel
 
 FINANCE_REF_SEQUENCE = "cmis_finance_ref_seq"
+DUES_CATEGORY_CODE = "membership-dues"
+MAX_DUES_MONTHS = 12
 MONEY = {"max_digits": 16, "decimal_places": 2}
 
 
@@ -33,6 +35,16 @@ def next_reference(prefix: str) -> str:
         c.execute(f"SELECT nextval('{FINANCE_REF_SEQUENCE}')")
         n = c.fetchone()[0]
     return f"{prefix}-{timezone.localdate().year}-{n:06d}"
+
+
+def add_months(month, n):
+    """First day of the month ``n`` months after ``month``."""
+    index = month.year * 12 + month.month - 1 + n
+    return month.replace(year=index // 12, month=index % 12 + 1, day=1)
+
+
+def month_range(first, count):
+    return [add_months(first, i) for i in range(count)]
 
 
 class Account(SoftDeleteModel):
@@ -173,6 +185,10 @@ class Transaction(SyncModel):
     submitted_by = models.ForeignKey("accounts.User", null=True, blank=True, on_delete=models.PROTECT,
                                      related_name="+")
     approved_at = models.DateTimeField(null=True, blank=True)
+    dues_month = models.DateField(null=True, blank=True, db_index=True,
+                                  help_text="Membership dues: first month paid for (always the 1st of the month)")
+    dues_months = models.PositiveSmallIntegerField(null=True, blank=True,
+                                                   help_text="Membership dues: number of consecutive months paid for")
     reversal_of = models.OneToOneField("self", null=True, blank=True, on_delete=models.PROTECT,
                                        related_name="reversed_by")
     is_demo = models.BooleanField(default=False, db_index=True)
@@ -191,6 +207,13 @@ class Transaction(SyncModel):
     def signed_amount(self):
         sign = 1 if self.kind == self.Kind.INCOME else -1
         return self.amount * sign
+
+    @property
+    def dues_period(self):
+        """The months a dues payment covers, as first-of-month dates (empty for other entries)."""
+        if not self.dues_month:
+            return []
+        return month_range(self.dues_month, self.dues_months or 1)
 
     @property
     def is_locked(self):

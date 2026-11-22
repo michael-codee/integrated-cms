@@ -9,7 +9,7 @@ from django.db import transaction
 
 from apps.accounts.models import Permission, Role
 from apps.accounts.registry import DEFAULT_ROLES, MODULES, expand
-from apps.organization.models import OrgUnit, UnitType
+from apps.organization.models import OrgUnit, UnitType, seed_levels
 
 from .models import (AssetCategory, Currency, DocumentCategory, FinanceCategory, MembershipCategory,
                      ProgramCategory, ServiceType, SystemSetting)
@@ -29,7 +29,8 @@ MEMBERSHIP_CATEGORIES = [
 ]
 
 INCOME_CATEGORIES = [
-    ("tithes", "Tithes", False), ("sunday-offering", "Sunday offerings", False),
+    ("tithes", "Tithes", False), ("membership-dues", "Monthly membership dues", False),
+    ("sunday-offering", "Sunday offerings", False),
     ("thanksgiving-offering", "Thanksgiving offerings", False), ("special-offering", "Special offerings", False),
     ("donations", "Donations", False), ("fundraising", "Fundraising contributions", False),
     ("conference-contributions", "Conference contributions", False),
@@ -57,15 +58,18 @@ ASSET_CATEGORIES = [
 ]
 
 PROGRAM_CATEGORIES = [
-    "Sunday service", "Midweek service", "Prayer meeting", "Bible study", "Revival", "Crusade", "Evangelism",
+    ("sunday-service", "Sunday Divine Service"), ("tuesday-bible-study", "Tuesday Bible Studies"),
+    ("friday-prayer-deliverance", "Friday Prayer and Deliverance Service"), "Midweek service", "Prayer meeting", "Bible study", "Revival", "Crusade", "Evangelism",
     "Conference", "Convention", "Annual celebration", "Leadership meeting", "Ministerial training",
     "Baptism program", "Youth program", "Women's program", "Men's program", "Children's ministry program",
     "Community outreach", "Missionary activity", "Project",
 ]
 
+# The three weekly services come first; their codes are used by attendance analysis.
 SERVICE_TYPES = [
-    "Sunday service", "Midweek service", "Special program", "Conference", "Bible study", "Departmental meeting",
-    "Prayer meeting",
+    ("sunday-service", "Sunday Divine Service"), ("tuesday-bible-study", "Tuesday Bible Studies"),
+    ("friday-prayer-deliverance", "Friday Prayer and Deliverance Service"),
+    "Midweek service", "Special program", "Conference", "Bible study", "Departmental meeting", "Prayer meeting",
 ]
 
 DOCUMENT_CATEGORIES = [
@@ -191,6 +195,7 @@ def _seed_unit(spec, parent=None):
 
 
 def seed_structure():
+    seed_levels()
     if OrgUnit.all_objects.filter(unit_type=UnitType.HEADQUARTERS).exclude(code=ORG_STRUCTURE["code"]).exists():
         return  # the administrator has already reorganised the structure; never overwrite it
     _seed_unit(ORG_STRUCTURE)

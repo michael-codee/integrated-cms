@@ -237,6 +237,16 @@ def record_class_completion(member, user, *, course, completed_on, facilitator="
 
 
 @transaction.atomic
+def register_disciple(member, user, *, classes, facilitator="", certificate_no="", notes=""):
+    """Record several classes at once; all or nothing. ``classes`` is a list of
+    ``{"course", "completed_on", "id"?}``. The badge is awarded once all three are on record."""
+    return [record_class_completion(member, user, course=c["course"], completed_on=c["completed_on"],
+                                    facilitator=facilitator, certificate_no=certificate_no, notes=notes,
+                                    record_id=c.get("id"))
+            for c in sorted(classes, key=lambda c: c["completed_on"])]
+
+
+@transaction.atomic
 def remove_class_completion(rec, user, reason=""):
     member = Member.objects.select_for_update().get(pk=rec.member_id)
     label = rec.get_course_display()

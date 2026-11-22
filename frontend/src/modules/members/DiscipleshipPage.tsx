@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Award, BookOpen, CheckCircle2, Circle, GraduationCap, Plus, Users } from 'lucide-react';
+import { Award, BookOpen, CheckCircle2, Circle, GraduationCap, Plus, UserPlus, Users } from 'lucide-react';
 import { api, type Page } from '@/lib/api';
 import { useAuth } from '@/app/AuthContext';
 import { Badge, Button, Card, DataTable, PageHeader, SearchInput, Select, StatCard, Toolbar, type Column } from '@/components/ui';
 import { UnitSelect } from '@/components/UnitSelect';
 import { ExportMenu } from '@/components/ExportMenu';
 import { date } from '@/lib/format';
-import { ClassCompletionModal, DiscipleshipBadge } from './Discipleship';
+import { ClassCompletionModal, DiscipleshipBadge, RegisterDiscipleModal } from './Discipleship';
 import { DISCIPLESHIP_CLASSES, type DiscipleshipCourse, type DiscipleshipRow, type DiscipleshipSummary } from './types';
 
 const FILTER_KEYS = ['search', 'org_unit', 'progress', 'missing', 'status'] as const;
@@ -25,6 +25,7 @@ export default function DiscipleshipPage() {
   const [params, setParams] = useSearchParams();
   const [search, setSearch] = useState(params.get('search') || '');
   const [recording, setRecording] = useState<DiscipleshipRow | null>(null);
+  const [registering, setRegistering] = useState(false);
   const page = Number(params.get('page') || 1);
   const filters = useMemo(() => Object.fromEntries(FILTER_KEYS.map((k) => [k, params.get(k) || ''])), [params]);
   const setFilter = (k: string, v: string) => {
@@ -73,7 +74,10 @@ export default function DiscipleshipPage() {
       <PageHeader title="Discipleship register"
         subtitle="Members who have gone through Foundation, Discipleship and Spiritual Growth classes. Completing all three earns the badge of discipleship."
         crumbs={[{ label: 'Home', to: '/' }, { label: 'Membership', to: '/members' }, { label: 'Discipleship' }]}
-        actions={<ExportMenu path="/discipleship-register/export/" params={filters} module="members" name="discipleship-register" />} />
+        actions={<>
+          <ExportMenu path="/discipleship-register/export/" params={filters} module="members" name="discipleship-register" />
+          {editable && <Button icon={<UserPlus className="h-4 w-4" />} onClick={() => setRegistering(true)}>Register disciple</Button>}
+        </>} />
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
         <StatCard label="Members" value={s ? s.members.toLocaleString() : '…'} icon={<Users className="h-5 w-5" />} />
         {DISCIPLESHIP_CLASSES.map((c, i) => (
@@ -101,6 +105,7 @@ export default function DiscipleshipPage() {
           onPage={(p) => setFilter('page', String(p))} onRowClick={(m) => navigate(`/members/${m.id}?tab=discipleship`)}
           emptyTitle="No members match these filters" />
       </Card>
+      {registering && <RegisterDiscipleModal open onClose={() => setRegistering(false)} />}
       {recording && (
         <ClassCompletionModal open member={recording} onClose={() => setRecording(null)}
           done={DISCIPLESHIP_CLASSES.filter((c) => recording[c.field]).map((c) => c.value as DiscipleshipCourse)} />

@@ -132,3 +132,45 @@ def test_register_export(api, people, member):
     assert res.status_code == 200
     body = res.content.decode()
     assert "Spiritual Growth Class" in body and "Awarded 2026-03-01" in body
+
+
+def register(client, member, classes, **extra):
+    return client.post("/api/discipleship-register/register/", {
+        "member": str(member.pk), "classes": [{"course": c, "completed_on": d} for c, d in classes], **extra},
+        format="json")
+
+
+def test_register_disciple_with_all_three_classes_awards_badge(api, people, member):
+    res = register(api(people["pastor_koidu"]), member, [
+        ("foundation", "2025-02-01"), ("discipleship", "2025-06-01"), ("spiritual_growth", "2025-10-01")],
+        facilitator="Rev. Sesay")
+    assert res.status_code == 201, res.data
+    assert res.data["classes_completed"] == 3 and res.data["discipleship_badge_on"] == "2025-10-01"
+    assert DiscipleshipCompletion.objects.filter(member=member, facilitator="Rev. Sesay").count() == 3
+    assert MembershipHistory.objects.filter(member=member, event="badge_awarded").count() == 1
+
+
+def test_register_disciple_with_some_classes(api, people, member):
+    client = api(people["pastor_koidu"])
+    res = register(client, member, [("foundation", "2025-02-01")])
+    assert res.status_code == 201 and res.data["classes_completed"] == 1
+    assert res.data["discipleship_badge_on"] is None
+    # Adding the rest later completes the pathway.
+    res = register(client, member, [("discipleship", "2025-06-01"), ("spiritual_growth", "2025-09-01")])
+    assert res.data["discipleship_badge_on"] == "2025-09-01"
+
+
+def test_register_disciple_is_all_or_nothing(api, people, member):
+    client = api(people["pastor_koidu"])
+    register(client, member, [("foundation", "2025-02-01")])
+    res = register(client, member, [("discipleship", "2025-06-01"), ("foundation", "2025-07-01")])
+    assert res.status_code == 400
+    assert not DiscipleshipCompletion.objects.filter(member=member, course="discipleship").exists()
+
+
+def test_register_disciple_validation_and_scope(api, people, member):
+    client = api(people["pastor_koidu"])
+    assert register(client, member, []).status_code == 400
+    assert register(client, member, [("foundation", "2025-02-01"), ("foundation", "2025-03-01")]).status_code == 400
+    assert register(api(people["pastor_bo"]), member, [("foundation", "2025-02-01")]).status_code == 404
+    assert register(api(people["treasurer_koidu"]), member, [("foundation", "2025-02-01")]).status_code == 403

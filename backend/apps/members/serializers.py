@@ -180,6 +180,35 @@ class DiscipleshipRegisterSerializer(serializers.ModelSerializer):
         return sum(1 for k in ("foundation_on", "discipleship_on", "spiritual_growth_on") if getattr(obj, k, None))
 
 
+class RegisterDiscipleClassSerializer(serializers.Serializer):
+    course = serializers.ChoiceField(choices=DiscipleshipClass.choices)
+    completed_on = serializers.DateField()
+    id = serializers.UUIDField(required=False)
+
+    def validate_completed_on(self, value):
+        if value > timezone.localdate():
+            raise serializers.ValidationError("Completion date cannot be in the future.")
+        return value
+
+
+class RegisterDiscipleSerializer(serializers.Serializer):
+    """Register a disciple: one member and the class or classes they have completed."""
+
+    member = serializers.UUIDField()
+    classes = RegisterDiscipleClassSerializer(many=True)
+    facilitator = serializers.CharField(required=False, allow_blank=True, default="", max_length=160)
+    certificate_no = serializers.CharField(required=False, allow_blank=True, default="", max_length=60)
+    notes = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate_classes(self, value):
+        if not value:
+            raise serializers.ValidationError("Tick at least one class.")
+        courses = [c["course"] for c in value]
+        if len(set(courses)) != len(courses):
+            raise serializers.ValidationError("Each class can only be listed once.")
+        return value
+
+
 class RemoveCompletionSerializer(serializers.Serializer):
     reason = serializers.CharField(required=False, allow_blank=True, default="")
 

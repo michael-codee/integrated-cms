@@ -2,7 +2,7 @@ from django.db.models import Exists, OuterRef, Prefetch, Q, Subquery
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
@@ -15,7 +15,7 @@ from . import services
 from .filters import DiscipleshipRegisterFilter, MemberFilter, WithinUnitFilter
 from .models import BaptismRecord, DiscipleshipClass, DiscipleshipCompletion, Member, MemberTransfer
 from .serializers import (DISCIPLESHIP_CLASSES, BaptismSerializer, DecisionSerializer, DiscipleshipCompletionSerializer,
-                          DiscipleshipRegisterSerializer, MemberListSerializer, MemberSerializer,
+                          DiscipleshipRegisterSerializer, MemberListSerializer, RegisterDiscipleSerializer, MemberSerializer,
                           MembershipHistorySerializer, RemoveCompletionSerializer, StatusChangeSerializer,
                           TransferSerializer)
 from .stats import scoped_member_stats
@@ -233,6 +233,7 @@ class DiscipleshipRegisterViewSet(ExportMixin, ScopedViewMixin, mixins.ListModel
     module = "members"
     serializer_class = DiscipleshipRegisterSerializer
     queryset = Member.objects.select_related("org_unit")
+    action_permissions = {"register": "edit", "summary": "view", "export": None}
     filterset_class = DiscipleshipRegisterFilter
     search_fields = ["first_name", "middle_name", "last_name", "membership_no"]
     ordering_fields = ["last_name", "first_name", "membership_no", "discipleship_badge_on", "foundation_on",
@@ -262,6 +263,22 @@ class DiscipleshipRegisterViewSet(ExportMixin, ScopedViewMixin, mixins.ListModel
         badge = queryset.filter(discipleship_badge_on__isnull=False).count()
         return [("Members", f"{total:,}"), ("Started the classes", f"{started:,}"),
                 ("Badge of discipleship", f"{badge:,}")]
+
+    @extend_schema(request=RegisterDiscipleSerializer, responses=DiscipleshipRegisterSerializer)
+    @action(detail=False, methods=["post"])
+    def register(self, request):
+        """Register a disciple: record one or more completed classes for a member in one step."""
+        s = RegisterDiscipleSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        data = s.validated_data
+        member = self.get_queryset().filter(pk=data["member"]).first()
+        if member is None:
+            raise NotFound("Member not found in your jurisdiction.")
+        self.require("edit", member.org_unit)
+        services.register_disciple(member, request.user, classes=data["classes"], facilitator=data["facilitator"],
+                                   certificate_no=data["certificate_no"], notes=data["notes"])
+        row = self.get_queryset().get(pk=member.pk)
+        return Response(self.get_serializer(row).data, status=201)
 
     @action(detail=False)
     def summary(self, request):

@@ -1,16 +1,20 @@
 """Attendance analytics within the user's jurisdiction."""
 import datetime
 
-from django.db.models import Avg, Count, F, Sum
+from django.db.models import Avg, Count, Q, Sum
 from django.db.models.functions import TruncWeek
 from django.utils import timezone
 
 from apps.core import scoping
 from apps.organization.models import OrgUnit
 
-from .models import AttendanceRecord
+from .models import GENDER_FIELDS, MINISTRY_FIELDS, TOTAL, AttendanceRecord
 
-TOTAL = F("men") + F("women") + F("boys") + F("girls")
+# The three weekly services, as (code, key in the weekly series).
+WEEKLY_SERVICES = (("sunday-service", "sunday"), ("tuesday-bible-study", "tuesday"),
+                   ("friday-prayer-deliverance", "friday"))
+MINISTRY_LABELS = {"men": "Men", "women": "Women", "children": "Children", "youth": "Youth",
+                   "young_adults": "Young adults"}
 
 
 def attendance_stats(user, unit=None, start=None, end=None):
@@ -21,12 +25,15 @@ def attendance_stats(user, unit=None, start=None, end=None):
     if unit is not None:
         qs = qs.filter(org_unit__path__startswith=unit.path)
     qs = qs.filter(date__gte=start, date__lte=end).annotate(t=TOTAL)
-    sunday = qs.filter(service_type__code="sunday-service", program__isnull=True, department__isnull=True)
+    services = qs.filter(program__isnull=True, department__isnull=True)
+    sunday = services.filter(service_type__code="sunday-service")
+    weekly_services = services.filter(service_type__code__in=[c for c, _ in WEEKLY_SERVICES])
     agg = qs.aggregate(gatherings=Count("id"), people=Sum("t"), first_timers=Sum("first_timers"),
                        converts=Sum("new_converts"), visitors=Sum("visitors"))
     weekly = [
-        {"week": r["w"].isoformat(), "sunday": r["s"] or 0}
-        for r in sunday.annotate(w=TruncWeek("date")).values("w").annotate(s=Sum("t")).order_by("w")
+        {"week": r["w"].isoformat(), **{key: r[key] or 0 for _, key in WEEKLY_SERVICES}}
+        for r in weekly_services.annotate(w=TruncWeek("date")).values("w").annotate(
+            **{key: Sum("t", filter=Q(service_type__code=code)) for code, key in WEEKLY_SERVICES}).order_by("w")
     ]
     by_type = list(qs.values("service_type__name").annotate(average=Avg("t"), gatherings=Count("id"))
                    .order_by("-average"))
@@ -45,7 +52,16 @@ def attendance_stats(user, unit=None, start=None, end=None):
                               "sundays": r["n"], "members": m,
                               "ratio": round((r["avg"] or 0) / m * 100) if m else None})
         by_branch.sort(key=lambda r: -r["average"])
-    composition = sunday.aggregate(men=Sum("men"), women=Sum("women"), boys=Sum("boys"), girls=Sum("girls"))
+    composition = sunday.aggregate(**{k: Sum(k) for k in MINISTRY_FIELDS + GENDER_FIELDS})
+    by_weekly_service = []
+    for code, key in WEEKLY_SERVICES:
+        rows = services.filter(service_type__code=code)
+        a = rows.aggregate(avg=Avg("t"), n=Count("id"), **{k: Sum(k) for k in MINISTRY_FIELDS + GENDER_FIELDS})
+        name = rows.values_list("service_type__name", flat=True).first()
+        by_weekly_service.append({
+            "key": key, "name": name or key.title(), "average": round(a["avg"] or 0), "gatherings": a["n"],
+            "ministry": {k: a[k] or 0 for k in MINISTRY_FIELDS}, "gender": {k: a[k] or 0 for k in GENDER_FIELDS},
+        })
     avg_sunday = sunday.aggregate(a=Avg("t"))["a"]
     return {
         "period": {"from": start, "to": end},
@@ -56,5 +72,7 @@ def attendance_stats(user, unit=None, start=None, end=None):
         "by_service_type": [{"name": r["service_type__name"], "average": round(r["average"] or 0),
                              "gatherings": r["gatherings"]} for r in by_type],
         "by_branch": by_branch,
-        "composition": [{"label": k.title(), "count": v or 0} for k, v in composition.items()],
+        "composition": [{"label": MINISTRY_LABELS[k], "count": composition[k] or 0} for k in MINISTRY_FIELDS],
+        "gender": [{"label": k.title(), "count": composition[k] or 0} for k in GENDER_FIELDS],
+        "by_weekly_service": by_weekly_service,
     }

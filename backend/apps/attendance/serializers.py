@@ -6,15 +6,33 @@ from apps.configuration.models import SystemSetting
 from apps.finance.serializers import ClientIdMixin
 from apps.members.models import Member
 
-from .models import AttendanceEntry, AttendanceRecord
+from .models import GENDER_FIELDS, MINISTRY_FIELDS, AttendanceEntry, AttendanceRecord
 
-COUNT_FIELDS = ("men", "women", "boys", "girls")
+# Age bands used to place a register member with no ministry department.
+CHILD_UNDER, YOUTH_UNDER, YOUNG_ADULT_UNDER = 13, 25, 36
+MINISTRY_DEPARTMENTS = ("children", "youth", "women", "men")  # department kinds, in order of precedence
 
 
 def _age(dob, on):
     if not dob:
         return None
     return on.year - dob.year - ((on.month, on.day) < (dob.month, dob.day))
+
+
+def ministry_of(member, on, department_kinds=()):
+    """The ministry category a member is counted under: their ministry department if they belong to one,
+    otherwise by age (unknown age counts as an adult)."""
+    for kind in MINISTRY_DEPARTMENTS:
+        if kind in department_kinds:
+            return kind
+    age = _age(member.date_of_birth, on)
+    if age is not None and age < CHILD_UNDER:
+        return "children"
+    if age is not None and age < YOUTH_UNDER:
+        return "youth"
+    if age is not None and age < YOUNG_ADULT_UNDER:
+        return "young_adults"
+    return "men" if member.gender == "male" else "women"
 
 
 class AttendanceSerializer(ClientIdMixin, serializers.ModelSerializer):
@@ -30,7 +48,7 @@ class AttendanceSerializer(ClientIdMixin, serializers.ModelSerializer):
     class Meta:
         model = AttendanceRecord
         fields = ["id", "org_unit", "org_unit_name", "service_type", "service_type_name", "program", "program_title",
-                  "department", "department_name", "date", "men", "women", "boys", "girls", "visitors",
+                  "department", "department_name", "date", *MINISTRY_FIELDS, *GENDER_FIELDS, "visitors",
                   "first_timers", "new_converts", "total", "is_individual", "present_members", "present_member_ids",
                   "notes", "recorded_by", "version", "client_created_at", "is_demo", "created_at"]
         read_only_fields = ["is_individual", "version", "is_demo", "created_at"]
@@ -73,23 +91,34 @@ class AttendanceSerializer(ClientIdMixin, serializers.ModelSerializer):
             if len(members) != len(set(present)):
                 raise serializers.ValidationError({"present_members": "Some members do not belong to this unit."})
             attrs["_members"] = members
-        if not attrs.get("_members") and sum(attrs.get(k, getattr(self.instance, k, 0) or 0) for k in COUNT_FIELDS) == 0 \
-                and present is None:
+        ministry = sum(get(k) or 0 for k in MINISTRY_FIELDS)
+        gender = sum(get(k) or 0 for k in GENDER_FIELDS)
+        if present is None and ministry == 0:
             raise serializers.ValidationError("Enter at least one count.")
-        if (attrs.get("visitors", 0) or 0) > sum(attrs.get(k, 0) or 0 for k in COUNT_FIELDS) and present is None:
+        if ministry != gender:
+            what = "others present" if present is not None else "attendance"
+            raise serializers.ValidationError({"male": f"Male + female ({gender}) must equal the ministry total "
+                                                       f"({ministry}) for {what}."})
+        if present is None and (get("visitors") or 0) > ministry:
             raise serializers.ValidationError({"visitors": "Visitors are part of the totals, so they cannot exceed them."})
         return attrs
 
     def _apply_members(self, record, members):
+        from apps.departments.models import DepartmentMember
+
         on = record.date
-        extra = {k: getattr(record, k) for k in COUNT_FIELDS}  # visitors / non-members entered by the user
-        counts = dict.fromkeys(COUNT_FIELDS, 0)
+        kinds = {}
+        for member_id, kind in DepartmentMember.objects.filter(
+                member__in=members, left_on__isnull=True, department__is_deleted=False,
+                department__kind__in=MINISTRY_DEPARTMENTS).values_list("member_id", "department__kind"):
+            kinds.setdefault(member_id, set()).add(kind)
+        fields = MINISTRY_FIELDS + GENDER_FIELDS
+        counts = {k: getattr(record, k) for k in fields}  # others present (visitors, non-members) entered by the user
         for m in members:
-            child = (_age(m.date_of_birth, on) or 99) < 13
-            key = ("boys" if m.gender == "male" else "girls") if child else ("men" if m.gender == "male" else "women")
-            counts[key] += 1
-        for k in COUNT_FIELDS:
-            setattr(record, k, counts[k] + extra[k])
+            counts[ministry_of(m, on, kinds.get(m.pk, ()))] += 1
+            counts["male" if m.gender == "male" else "female"] += 1
+        for k in fields:
+            setattr(record, k, counts[k])
         record.is_individual = True
         record.save()
         record.entries.all().delete()

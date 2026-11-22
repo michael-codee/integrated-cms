@@ -108,7 +108,7 @@ Register buildings, land, vehicles, instruments and equipment with location, cus
 ## 8. Programs, attendance and ministries
 
 - **Programs & events**: plan services, crusades, conferences and outreach with dates, venue, speakers, expected attendance and budget. Programs are approved by the unit above. After the event, record the **outcome** (decisions for Christ, baptisms, follow-up). Postpone or cancel with a reason.
-- **Attendance**: **Record attendance** for each service: men, women, boys, girls, visitors, first-time guests and new converts. If your branch uses the member register, you can tick the members present instead. One record per service per day. Analysis shows the Sunday trend and attendance against membership.
+- **Attendance**: **Record attendance** for each service, including the three weekly services (Tuesday Bible Studies, Friday Prayer and Deliverance Service, Sunday Divine Service; the form picks the right one from the date). Count everyone twice: **by ministry** (Men, Women, Children, Youth, Young adults) and **by gender** (male, female). The two subtotals must match. Also record visitors, first-time guests and new converts. If your branch uses the member register, you can tick the members present instead: each is counted under their men's, women's, youth or children's ministry department, or by age if they have none (under 13 children, 13 to 24 youth, 25 to 35 young adults). One record per service per day. Analysis shows the weekly trend for each service, the ministry and gender breakdown, and attendance against membership.
 - **Ministries & departments**: youth, women, men, Sunday school, choir and others, with leaders and members.
 
 ---

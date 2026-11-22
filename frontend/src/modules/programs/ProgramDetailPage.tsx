@@ -75,8 +75,8 @@ export default function ProgramDetailPage() {
   const cols: Column<AttendanceRecord>[] = [
     { key: 'date', header: 'Date', render: (r) => date(r.date) },
     { key: 'unit', header: 'Unit', render: (r) => r.org_unit_name },
-    { key: 'adults', header: 'Adults', align: 'right', render: (r) => (r.men + r.women).toLocaleString() },
-    { key: 'children', header: 'Children', align: 'right', render: (r) => (r.boys + r.girls).toLocaleString() },
+    { key: 'gender', header: 'Male · Female', align: 'right', render: (r) => `${r.male.toLocaleString()} · ${r.female.toLocaleString()}` },
+    { key: 'children', header: 'Children', align: 'right', render: (r) => r.children.toLocaleString() },
     { key: 'conv', header: 'Converts', align: 'right', hideOnMobile: true, render: (r) => r.new_converts },
     { key: 'total', header: 'Total', align: 'right', render: (r) => <strong>{r.total.toLocaleString()}</strong> },
   ];

@@ -101,7 +101,9 @@ class Member(SyncModel):
         return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
     def clean(self):
-        if self.org_unit_id and self.org_unit.unit_type not in ("branch", "congregation"):
+        from apps.organization.models import member_level_codes
+
+        if self.org_unit_id and self.org_unit.unit_type not in member_level_codes():
             raise ValidationError({"org_unit": "Members belong to a branch or congregation."})
         if self.date_of_birth and self.date_of_birth > timezone.localdate():
             raise ValidationError({"date_of_birth": "Date of birth cannot be in the future."})

@@ -4,13 +4,14 @@ import { UserPlus } from 'lucide-react';
 import { api, ApiError, type Page } from '@/lib/api';
 import { useAuth } from '@/app/AuthContext';
 import { Badge, Button, Card, DataTable, Field, FormError, FormGrid, Input, Modal, PageHeader, SearchInput, Select, StatusBadge, Toolbar, useToast, type Column } from '@/components/ui';
-import { useOrgUnits, UNIT_LABELS } from '@/lib/queries';
+import { useLevelLabels, useOrgUnits } from '@/lib/queries';
 import { dateTime, relative } from '@/lib/format';
 import type { UserRow } from './types';
 import { passwordProblems } from '../auth/password';
 import UserDetailModal, { useRoles } from './UserDetailModal';
 
 function CreateUserModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const UNIT_LABELS = useLevelLabels();
   const qc = useQueryClient();
   const toast = useToast();
   const { data: roles = [] } = useRoles();

@@ -1,11 +1,12 @@
 import { labellable, Select } from './ui';
-import { useOrgUnits, UNIT_LABELS } from '@/lib/queries';
+import { useLevelLabels, useOrgUnits } from '@/lib/queries';
 
 /** Picks an org unit from the user's jurisdiction. `types` limits the choices. */
 export const UnitSelect = labellable(function UnitSelect({ value, onChange, types, placeholder = 'All units', allowEmpty = true, invalid, className, id }: {
   value: string; onChange: (v: string) => void; types?: string[]; placeholder?: string; allowEmpty?: boolean; invalid?: boolean; className?: string; id?: string;
 }) {
   const { data: units = [] } = useOrgUnits();
+  const UNIT_LABELS = useLevelLabels();
   const list = units.filter((u) => !types || types.includes(u.unit_type));
   // Sort by lineage names for a readable tree order.
   const key = (u: (typeof units)[number]) => [...(u.lineage || []).map((l) => l.name), u.name].join(' / ');

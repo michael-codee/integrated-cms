@@ -6,7 +6,7 @@ import { uuid } from '@/lib/device';
 import { submitChange } from '@/offline/repository';
 import { Button, Checkbox, Field, FormError, FormGrid, Input, Modal, Select, Textarea, useToast } from '@/components/ui';
 import { UnitSelect } from '@/components/UnitSelect';
-import { useLookup } from '@/lib/queries';
+import { useLookup, useMemberLevels } from '@/lib/queries';
 import { today } from '@/lib/format';
 import { useAuth } from '@/app/AuthContext';
 import type { Member } from './types';
@@ -25,12 +25,13 @@ export function MemberForm({ open, onClose, member, onSaved }: { open: boolean; 
   const [photo, setPhoto] = useState<File | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const memberLevels = useMemberLevels();
   const [dups, setDups] = useState<{ matches: Member[]; outside_jurisdiction: number } | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setErrors({}); setDups(null); setPhoto(null);
-    const defaultUnit = user?.assignments.find((a) => ['branch', 'congregation'].includes(a.org_unit_type))?.org_unit || '';
+    const defaultUnit = user?.assignments.find((a) => memberLevels.includes(a.org_unit_type))?.org_unit || '';
     const init = Object.fromEntries(FIELDS.map((k) => [k, ''])) as F;
     setForm(member ? { ...init, ...Object.fromEntries(FIELDS.map((k) => [k, member[k as keyof Member] ?? ''])) } as F
       : { ...init, gender: '', org_unit: defaultUnit, joined_on: today(), baptism_status: 'not_baptized', photo_consent: false });
@@ -146,7 +147,7 @@ export function MemberForm({ open, onClose, member, onSaved }: { open: boolean; 
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Church membership</h3>
           <FormGrid cols={3}>
             <Field label="Branch" required error={errors.org_unit} hint={member ? 'Use “Transfer” to move to another branch.' : undefined}>
-              {member ? <Input value={member.org_unit_name} disabled /> : <UnitSelect value={String(form.org_unit)} onChange={(v) => setForm({ ...form, org_unit: v })} types={['branch', 'congregation']} placeholder="Select branch…" invalid={!!errors.org_unit} />}
+              {member ? <Input value={member.org_unit_name} disabled /> : <UnitSelect value={String(form.org_unit)} onChange={(v) => setForm({ ...form, org_unit: v })} types={memberLevels} placeholder="Select branch…" invalid={!!errors.org_unit} />}
             </Field>
             <Field label="Date joined" error={errors.joined_on}><Input type="date" max={today()} value={String(form.joined_on)} onChange={set('joined_on')} /></Field>
             <Field label="Membership category" error={errors.category}>

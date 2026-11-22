@@ -1,6 +1,7 @@
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, type Page } from './api';
-import type { Lookup, OrgUnit } from '@/app/types';
+import type { Lookup, OrgUnit, StructureLevel } from '@/app/types';
 
 export type LookupName = 'membership-categories' | 'finance-categories' | 'asset-categories' | 'program-categories' | 'service-types' | 'document-categories';
 
@@ -33,6 +34,28 @@ export function usePublicSettings() {
   });
 }
 
+/** Labels for the default levels; used until the administrator's levels have loaded. */
 export const UNIT_LABELS: Record<string, string> = {
   headquarters: 'Headquarters', region: 'Region', district: 'District', branch: 'Branch', congregation: 'Congregation',
 };
+
+/** The levels of the church hierarchy, as defined by the administrator (ordered top to bottom). */
+export function useStructureLevels() {
+  return useQuery({
+    queryKey: ['structure-levels'],
+    queryFn: () => api<StructureLevel[]>('/structure-levels/'),
+    staleTime: 10 * 60 * 1000,
+  });
+}
+
+/** Level code → display name, including any levels the administrator added. */
+export function useLevelLabels(): Record<string, string> {
+  const { data } = useStructureLevels();
+  return useMemo(() => ({ ...UNIT_LABELS, ...Object.fromEntries((data || []).map((l) => [l.code, l.name])) }), [data]);
+}
+
+/** Codes of the levels where members are registered (branches, congregations…). */
+export function useMemberLevels(): string[] {
+  const { data } = useStructureLevels();
+  return useMemo(() => (data ? data.filter((l) => l.holds_members).map((l) => l.code) : ['branch', 'congregation']), [data]);
+}

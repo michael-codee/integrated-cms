@@ -2,20 +2,30 @@ import { lazy, Suspense, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
-import { Building, Building2, ChevronDown, ChevronRight, Church, Globe2, Landmark, MapPin, Pencil, Plus, Power } from 'lucide-react';
+import { Building, ChevronDown, ChevronRight, MapPin, Pencil, Plus, Power, Trash2 } from 'lucide-react';
 import { api } from '@/lib/api';
-import type { OrgUnit } from '@/app/types';
+import type { OrgUnit, StructureLevel } from '@/app/types';
 import { useAuth } from '@/app/AuthContext';
-import { Badge, Button, Card, CardBody, CardHeader, ConfirmDialog, DescriptionList, EmptyState, PageHeader, PageLoader, SearchInput, StatusBadge, Tabs, useToast } from '@/components/ui';
-import { UNIT_LABELS, useOrgUnits } from '@/lib/queries';
+import { Badge, Button, Card, CardBody, CardHeader, ConfirmDialog, DescriptionList, EmptyState, Field, PageHeader, PageLoader, SearchInput, StatusBadge, Tabs, Textarea, useToast } from '@/components/ui';
+import { useLevelLabels, useMemberLevels, useOrgUnits, useStructureLevels } from '@/lib/queries';
 import { date, dateTime, titleCase } from '@/lib/format';
-import { UnitForm } from './UnitForm';
+import { childLevel, UnitForm } from './UnitForm';
+import { LevelsPanel } from './LevelsPanel';
+import { LEVEL_ICONS, type LevelIcon } from './icons';
+import { RemoveUnitDialog } from './RemoveUnitDialog';
 import { unitPanels } from './panels';
 
 const BranchMap = lazy(() => import('@/components/BranchMap'));
 
-const PLURAL: Record<string, string> = { region: 'regions', district: 'districts', branch: 'branches', congregation: 'congregations' };
-const ICONS = { headquarters: Landmark, region: Globe2, district: Building2, branch: Church, congregation: Building };
+const DEFAULT_ICON: Record<string, LevelIcon> = { headquarters: 'landmark', region: 'globe', district: 'building2', branch: 'church', congregation: 'building' };
+
+function useIconFor() {
+  const { data: levels } = useStructureLevels();
+  return (code: string) => {
+    const name = (levels?.find((l) => l.code === code)?.icon || DEFAULT_ICON[code] || 'building') as LevelIcon;
+    return LEVEL_ICONS[name] || Building;
+  };
+}
 
 interface TreeNode extends OrgUnit { children: TreeNode[] }
 
@@ -33,7 +43,7 @@ function buildTree(units: OrgUnit[]): TreeNode[] {
 
 function TreeItem({ node, selected, onSelect, filter }: { node: TreeNode; selected?: string; onSelect: (id: string) => void; filter: string }) {
   const [open, setOpen] = useState(node.depth < 2);
-  const Icon = ICONS[node.unit_type];
+  const Icon = useIconFor()(node.unit_type);
   const matches = (n: TreeNode): boolean => !filter || n.name.toLowerCase().includes(filter) || n.code.toLowerCase().includes(filter) || n.children.some(matches);
   if (!matches(node)) return null;
   const expanded = open || !!filter;
@@ -67,18 +77,25 @@ function UnitDetail({ unit, units }: { unit: OrgUnit; units: OrgUnit[] }) {
   const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState(false);
   const [toggling, setToggling] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
+  const { data: levels = [] } = useStructureLevels();
+  const UNIT_LABELS = useLevelLabels();
+  const next = childLevel(levels, unit.unit_type);
+  const activeChildren = units.filter((u) => u.parent === unit.id && u.status === 'active').length;
   const history = useQuery({ queryKey: ['org-units', unit.id, 'history'], queryFn: () => api<{ id: string; event: string; changes: Record<string, unknown>; note: string; by: string | null; created_at: string }[]>(`/org-units/${unit.id}/history/`), enabled: tab === 'history' });
   const children = units.filter((u) => u.parent === unit.id);
-  const Icon = ICONS[unit.unit_type];
+  const Icon = useIconFor()(unit.unit_type);
   const extraPanels = unitPanels.filter((p) => !p.perm || can(p.perm));
 
   const toggleStatus = async () => {
     setBusy(true);
     try {
-      await api(`/org-units/${unit.id}/status/`, { method: 'POST', body: { status: unit.status === 'active' ? 'inactive' : 'active' } });
+      await api(`/org-units/${unit.id}/status/`, { method: 'POST', body: { status: unit.status === 'active' ? 'inactive' : 'active', note } });
       qc.invalidateQueries({ queryKey: ['org-units'] });
-      toast.success(`${unit.name} is now ${unit.status === 'active' ? 'inactive' : 'active'}.`);
+      toast.success(`${unit.name} is now ${unit.status === 'active' ? 'closed (inactive)' : 'active'}.`);
+      setNote('');
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -103,14 +120,17 @@ function UnitDetail({ unit, units }: { unit: OrgUnit; units: OrgUnit[] }) {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {can('org.create') && unit.unit_type !== 'congregation' && (
-            <Button size="sm" variant="secondary" icon={<Plus className="h-4 w-4" />} onClick={() => setAdding(true)}>Add {UNIT_LABELS[{ headquarters: 'region', region: 'district', district: 'branch', branch: 'congregation' }[unit.unit_type] as string]?.toLowerCase()}</Button>
+          {can('org.create') && next && (
+            <Button size="sm" variant="secondary" icon={<Plus className="h-4 w-4" />} onClick={() => setAdding(true)}>Add {next.name.toLowerCase()}</Button>
           )}
           {can('org.edit') && <Button size="sm" variant="secondary" icon={<Pencil className="h-4 w-4" />} onClick={() => setEditing(true)}>Edit</Button>}
           {can('org.edit') && unit.unit_type !== 'headquarters' && (
             <Button size="sm" variant={unit.status === 'active' ? 'ghost' : 'success'} icon={<Power className="h-4 w-4" />} onClick={() => setToggling(true)}>
-              {unit.status === 'active' ? 'Deactivate' : 'Activate'}
+              {unit.status === 'active' ? 'Close' : 'Reopen'}
             </Button>
+          )}
+          {can('org.delete') && unit.unit_type !== 'headquarters' && (
+            <Button size="sm" variant="ghost" icon={<Trash2 className="h-4 w-4" />} onClick={() => setRemoving(true)}>Remove</Button>
           )}
         </div>
       </div>
@@ -168,9 +188,17 @@ function UnitDetail({ unit, units }: { unit: OrgUnit; units: OrgUnit[] }) {
       <UnitForm open={editing} onClose={() => setEditing(false)} unit={unit} />
       <UnitForm open={adding} onClose={() => setAdding(false)} parent={unit} />
       <ConfirmDialog open={toggling} onClose={() => setToggling(false)} onConfirm={toggleStatus} loading={busy}
-        title={unit.status === 'active' ? `Deactivate ${unit.name}?` : `Activate ${unit.name}?`}
-        tone={unit.status === 'active' ? 'danger' : 'success'} confirmLabel={unit.status === 'active' ? 'Deactivate' : 'Activate'}
-        message="The unit and its records are kept; the change is recorded in the unit's history." />
+        title={unit.status === 'active' ? `Close ${unit.name}?` : `Reopen ${unit.name}?`}
+        tone={unit.status === 'active' ? 'danger' : 'success'} confirmLabel={unit.status === 'active' ? 'Close unit' : 'Reopen'}
+        message={unit.status === 'active'
+          ? 'The unit is marked inactive. Its members, finances and records are kept and stay in reports, but it can no longer receive new members. You can reopen it later.'
+          : 'The unit becomes active again.'}>
+        {unit.status === 'active' && activeChildren > 0 && (
+          <p className="rounded-md bg-amber-50 p-2 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">{activeChildren} active unit(s) below this one stay open. Close or move them separately.</p>
+        )}
+        <Field label="Reason (optional)"><Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Merged with Tankoro branch" /></Field>
+      </ConfirmDialog>
+      <RemoveUnitDialog open={removing} unit={unit} onClose={() => setRemoving(false)} onCloseInstead={() => { setRemoving(false); setToggling(true); }} />
     </Card>
   );
 }
@@ -182,7 +210,10 @@ export default function StructurePage() {
   const [filter, setFilter] = useState('');
   const [creating, setCreating] = useState(false);
   const tree = useMemo(() => buildTree(units || []), [units]);
-  const view = params.get('view') === 'map' ? 'map' : 'tree';
+  const view = (['map', 'levels'] as const).find((v) => v === params.get('view')) || 'tree';
+  const { data: levels = [] } = useStructureLevels();
+  const memberLevels = useMemberLevels();
+  const shownLevels: StructureLevel[] = levels.filter((l) => l.code !== 'headquarters' && (l.is_active || l.unit_count > 0));
   const selectedId = params.get('unit') || tree[0]?.id;
   const selected = units?.find((u) => u.id === selectedId);
   const counts = useMemo(() => {
@@ -193,30 +224,30 @@ export default function StructurePage() {
 
   return (
     <div>
-      <PageHeader title="Church structure" subtitle="Headquarters, regions, districts, branches and congregations"
+      <PageHeader title="Church structure" subtitle={levels.length ? levels.map((l) => l.plural_name || l.name).join(', ') : 'Headquarters, regions, districts, branches and congregations'}
         crumbs={[{ label: 'Home', to: '/' }, { label: 'Church structure' }]}
         actions={can('org.create') && <Button icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>Add unit</Button>} />
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {(['region', 'district', 'branch', 'congregation'] as const).map((t) => {
-          const Icon = ICONS[t];
+        {shownLevels.map((l) => {
+          const Icon = LEVEL_ICONS[l.icon as LevelIcon] || Building;
           return (
-            <div key={t} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
-              <Icon className="h-5 w-5 text-royal-600 dark:text-royal-300" />
-              <div><p className="text-lg font-semibold text-slate-900 dark:text-white">{counts[t] || 0}</p><p className="text-xs text-slate-500">Active {PLURAL[t]}</p></div>
+            <div key={l.code} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
+              <Icon className="h-5 w-5 shrink-0 text-royal-600 dark:text-royal-300" />
+              <div className="min-w-0"><p className="text-lg font-semibold text-slate-900 dark:text-white">{counts[l.code] || 0}</p><p className="truncate text-xs text-slate-500">Active {(l.plural_name || l.name).toLowerCase()}</p></div>
             </div>
           );
         })}
       </div>
-      <Tabs value={view} onChange={(v) => { const n = new URLSearchParams(params); if (v === 'map') n.set('view', 'map'); else n.delete('view'); setParams(n); }}
-        tabs={[{ value: 'tree', label: 'Organisation' }, { value: 'map', label: 'Branch map' }]} />
-      {view === 'map' ? (
+      <Tabs value={view} onChange={(v) => { const n = new URLSearchParams(params); if (v !== 'tree') n.set('view', v); else n.delete('view'); setParams(n); }}
+        tabs={[{ value: 'tree', label: 'Organisation' }, { value: 'map', label: 'Branch map' }, { value: 'levels', label: 'Structure levels' }]} />
+      {view === 'levels' ? <LevelsPanel /> : view === 'map' ? (
         <Card>
           <CardBody>
             <Suspense fallback={<PageLoader />}>
-              <BranchMap height={520} branches={(units || []).filter((u) => ['branch', 'congregation'].includes(u.unit_type)).map((u) => ({ ...u, latitude: u.latitude ? Number(u.latitude) : null, longitude: u.longitude ? Number(u.longitude) : null }))} />
+              <BranchMap height={520} branches={(units || []).filter((u) => memberLevels.includes(u.unit_type)).map((u) => ({ ...u, latitude: u.latitude ? Number(u.latitude) : null, longitude: u.longitude ? Number(u.longitude) : null }))} />
             </Suspense>
             <p className="mt-3 text-xs text-slate-500">
-              {(units || []).filter((u) => ['branch', 'congregation'].includes(u.unit_type) && !u.latitude).length} branch(es) without coordinates are not shown — add latitude/longitude on the branch profile.
+              {(units || []).filter((u) => memberLevels.includes(u.unit_type) && !u.latitude).length} branch(es) without coordinates are not shown — add latitude/longitude on the branch profile.
             </p>
           </CardBody>
         </Card>

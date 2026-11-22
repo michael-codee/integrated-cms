@@ -272,3 +272,22 @@ known limitations, phase by phase.
 
 **Next phases (not built):** video files and live camera or HDMI-capture feeds, video backgrounds, lower thirds, countdown timer, stage display for the preacher; then phone remote and other Bible translations (licence needed). Streaming to YouTube or Facebook is left to OBS.
 
+---
+
+## Media presentation, phase 2 — video, live camera, captions, countdown, stage display  ✅
+
+**Completed**
+
+- **Videos on the media computer**: files are copied into the browser's own storage (IndexedDB `rlwm-media-local`, persistent storage requested, 1.5 GB per file) instead of uploaded, so a service never waits on the connection. Plans store only a local id and the file name; another computer with the same file name plays it. Kept on sign-out (church media, not personal records).
+- **Video items and player**: the projector window plays the file with sound; desk and projector follow one transport (position + time it was set, same clock), so pause, seek, start again, repeat and volume stay in step and a reloaded projector resumes in place. The projector reports progress back for the desk's time bar and the stage display. If the browser blocks sound, the video plays muted and the desk says to click the projector window once.
+- **Moving backgrounds**: a local video looping silently behind the words (`theme.background_video`, with the file name).
+- **Live camera / HDMI capture** as a plan item or a one-click **Show**; device chosen on the desk and remembered on that computer (by id and name, since Chrome gives each window its own device ids); optional sound from the capture card's own audio input (echo cancellation off). Errors show on the desk preview only, never on the projector.
+- **Name captions** (lower thirds) over anything, with a list of recent captions; **countdown** to a number of minutes or a clock time, full screen or in the corner, on the screen, the stage display or both.
+- **Stage display** (`/presentation/stage`): what is on screen, the next slide (carrying on into the next item), notes for the current item, clock, countdown (turns red when over time) and flashing messages from the desk. Items of any kind can carry notes (`notes`, at most 2,000 characters) that never reach the projector.
+- **Camera permission for the media pages only**: the media pages are served from their own copy of the app shell (`presentation.html`, a second Vite entry) with `Permissions-Policy: camera=(self), microphone=(self)`; the rest of the app keeps `camera=()`. The service worker serves `presentation.html` for `/presentation/*` navigations so the header holds offline too, and the sidebar links to the media pages load the page afresh when the current page has the camera switched off. `media-src 'self' blob:` added to the CSP. Same rules in `vercel.json` and the Caddyfile.
+- No database migration: video, camera and notes live in the plan's existing JSON fields; the server validates them.
+
+**Tests:** 1 new backend test and 3 new validation cases (video/camera/notes items, background video), 6 new frontend unit tests (transport timing, finding a video by name, time formats, video/camera slides, next slide for the stage display); a browser run with a fake camera and a sample video covered adding a video, video and camera items with notes, saving, projector and stage windows, play/pause by keyboard, camera on the projector, caption, corner and full-screen countdown, stage message, moving background and reloading the projector.
+
+**Known limitations:** videos must be added on each media computer; the camera picture is not mixed with slides (a caption is the only overlay). Phone remote and other Bible translations remain for a later phase.
+

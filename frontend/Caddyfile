@@ -13,10 +13,16 @@
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
 		Referrer-Policy "same-origin"
-		Permissions-Policy "camera=(), microphone=(), geolocation=()"
-		Content-Security-Policy "default-src 'self'; img-src 'self' data: blob: https://*.tile.openstreetmap.org; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		Content-Security-Policy "default-src 'self'; img-src 'self' data: blob: https://*.tile.openstreetmap.org; style-src 'self' 'unsafe-inline'; font-src 'self' data:; media-src 'self' blob:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
 		-Server
 	}
+
+	# Camera and microphone stay off, except on the media pages (live camera / HDMI capture feed).
+	# Those pages are served from their own copy of the app shell, presentation.html.
+	@media_pages path /presentation /presentation/* /presentation.html
+	@other_pages not path /presentation /presentation/* /presentation.html
+	header @other_pages Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	header @media_pages Permissions-Policy "camera=(self), microphone=(self), geolocation=()"
 
 	# API, Django admin and its static files go to the Django application.
 	# Uploaded files are never served from disk here: the API streams them after checking a signed link.
@@ -33,10 +39,12 @@
 	handle {
 		root * /srv
 		# The service worker and app shell must always be re-validated so updates reach devices.
-		@nocache path /sw.js /index.html /manifest.webmanifest /registerSW.js
+		@nocache path /sw.js /index.html /presentation.html /manifest.webmanifest /registerSW.js
 		header @nocache Cache-Control "no-cache"
 		@assets path /assets/*
 		header @assets Cache-Control "public, max-age=31536000, immutable"
+		@presentation path /presentation /presentation/*
+		rewrite @presentation /presentation.html
 		try_files {path} /index.html
 		file_server
 	}

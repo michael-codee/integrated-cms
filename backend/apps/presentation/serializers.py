@@ -7,10 +7,15 @@ from apps.core.files import SignedFilesMixin
 
 from .models import MediaImage, ServicePlan, Song
 
-ITEM_KINDS = {"song", "scripture", "text", "image", "blank"}
+ITEM_KINDS = {"song", "scripture", "text", "image", "blank", "video", "camera"}
 MAX_ITEMS = 200
 REF_RE = re.compile(r"^\s*([1-3]?\s*[A-Za-z][A-Za-z .]*?)\s+(\d{1,3})(?::(\d{1,3})(?:\s*-\s*(\d{1,3}))?)?\s*$")
-THEME_KEYS = {"preset", "background_image", "font_scale", "align", "show_reference", "uppercase"}
+THEME_KEYS = {"preset", "background_image", "background_video", "background_video_name", "font_scale", "align",
+              "show_reference", "uppercase"}
+# Videos stay on the media computer (they are too large to upload over the church's connections), so a
+# plan only names them: a short id given by that computer plus the file name to find it on another one.
+LOCAL_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
+MAX_NOTES = 2000
 
 
 def _uuid(value, i, what):
@@ -91,7 +96,8 @@ class ServicePlanSerializer(serializers.ModelSerializer):
         song_ids, image_ids, clean = set(), set(), []
         for i, item in enumerate(items, start=1):
             if not isinstance(item, dict) or item.get("kind") not in ITEM_KINDS:
-                raise serializers.ValidationError(f"Item {i} is not a song, scripture, text, picture or blank screen.")
+                raise serializers.ValidationError(
+                    f"Item {i} is not a song, scripture, text, picture, video, live camera or blank screen.")
             kind = item["kind"]
             out = {"kind": kind, "key": str(item.get("key") or i)[:40]}
             if kind == "song":
@@ -110,8 +116,21 @@ class ServicePlanSerializer(serializers.ModelSerializer):
             elif kind == "image":
                 out["image"] = _uuid(item.get("image"), i, "picture")
                 image_ids.add(out["image"])
+            elif kind == "video":
+                video = str(item.get("video") or "")
+                if not LOCAL_ID_RE.match(video):
+                    raise serializers.ValidationError(f"Item {i}: choose a video from this computer.")
+                out["video"] = video
+                out["name"] = str(item.get("name") or "")[:200]
+                if item.get("loop"):
+                    out["loop"] = True
             if item.get("label"):
                 out["label"] = str(item["label"])[:160]
+            notes = str(item.get("notes") or "").strip()
+            if len(notes) > MAX_NOTES:
+                raise serializers.ValidationError(f"Item {i}: the notes are too long ({MAX_NOTES:,} characters at most).")
+            if notes:
+                out["notes"] = notes
             clean.append(out)
         if song_ids and Song.objects.filter(pk__in=song_ids).count() != len(song_ids):
             raise serializers.ValidationError("One of the songs is no longer in the library.")
@@ -125,6 +144,11 @@ class ServicePlanSerializer(serializers.ModelSerializer):
         unknown = set(theme) - THEME_KEYS
         if unknown:
             raise serializers.ValidationError(f"Unknown theme settings: {', '.join(sorted(unknown))}.")
+        video = theme.get("background_video")
+        if video and not (isinstance(video, str) and LOCAL_ID_RE.match(video)):
+            raise serializers.ValidationError("The background video is not a video from this computer.")
+        if "background_video_name" in theme:
+            theme = {**theme, "background_video_name": str(theme["background_video_name"] or "")[:200]}
         return theme
 
     def validate(self, attrs):

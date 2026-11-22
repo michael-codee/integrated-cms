@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import { openChannel, type LiveState } from './channel';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { openChannel, type LiveState, type VideoProgress } from './channel';
+import { useLocalVideoUrl } from './localVideos';
 import { SlideView, useObjectUrl } from './SlideView';
 
 /**
@@ -11,6 +12,7 @@ export default function OutputPage() {
   const [cursor, setCursor] = useState(true);
   const seq = useRef(-1);
   const hideTimer = useRef<number>();
+  const channel = useRef<ReturnType<typeof openChannel>>();
 
   useEffect(() => {
     document.title = 'Projector — RLWM';
@@ -20,8 +22,9 @@ export default function OutputPage() {
         setState(m.state);
       }
     });
-    ch.post({ type: 'hello' });
-    const ping = window.setInterval(() => ch.post({ type: 'ping' }), 2000);
+    channel.current = ch;
+    ch.post({ type: 'hello', from: 'output' });
+    const ping = window.setInterval(() => ch.post({ type: 'ping', from: 'output' }), 2000);
     return () => { window.clearInterval(ping); ch.close(); };
   }, []);
 
@@ -39,6 +42,11 @@ export default function OutputPage() {
 
   const imageUrl = useObjectUrl(state?.slideImage);
   const backgroundUrl = useObjectUrl(state?.background);
+  // Videos are read from this computer's storage, not sent through the channel.
+  const videoUrl = useLocalVideoUrl(state?.slide?.kind === 'video' ? state.slide.video : null);
+  const backgroundVideoUrl = useLocalVideoUrl(state?.backgroundVideo);
+  const onVideoProgress = useCallback((progress: VideoProgress) => channel.current?.post({ type: 'video', progress }), []);
+  const countdown = state?.countdown && state.countdown.where !== 'stage' ? state.countdown : null;
   const fullscreen = () => {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
   };
@@ -46,7 +54,9 @@ export default function OutputPage() {
   return (
     <div className="fixed inset-0 bg-black" style={{ cursor: cursor ? 'default' : 'none' }} onClick={fullscreen} onDoubleClick={() => document.exitFullscreen?.().catch(() => {})}>
       {state ? (
-        <SlideView fill slide={state.slide} theme={state.theme} mode={state.mode} imageUrl={imageUrl} backgroundUrl={backgroundUrl} />
+        <SlideView fill slide={state.slide} theme={state.theme} mode={state.mode} imageUrl={imageUrl} backgroundUrl={backgroundUrl}
+          videoUrl={videoUrl} transport={state.video} camera={state.camera} backgroundVideoUrl={backgroundVideoUrl}
+          lowerThird={state.lowerThird} countdown={countdown} muted={false} onVideoProgress={onVideoProgress} />
       ) : (
         <div className="flex h-full flex-col items-center justify-center gap-4 text-center text-slate-300">
           <img src="/logo.webp" alt="" className="h-28 w-28 rounded-full bg-white object-contain p-2" />

@@ -99,7 +99,10 @@ def test_service_plan_scoped_to_branch(api, people, units, media_user):
 
 
 @pytest.mark.parametrize("item,message", [
-    ({"kind": "video"}, "not a song"),
+    ({"kind": "slideshow"}, "not a song"),
+    ({"kind": "video"}, "video from this computer"),
+    ({"kind": "video", "video": "../../etc/passwd"}, "video from this computer"),
+    ({"kind": "blank", "notes": "x" * 2001}, "too long"),
     ({"kind": "scripture", "ref": "hello"}, "Bible reference"),
     ({"kind": "song", "song": "not-a-uuid"}, "choose a song"),
     ({"kind": "song", "song": "8b0f7c55-0f55-4c51-9d55-0b9c7a3c0e11"}, "no longer in the library"),
@@ -109,6 +112,30 @@ def test_bad_plan_items_refused(api, units, media_user, item, message):
     r = api(media_user).post("/api/media/plans/", {"org_unit": str(units["BR-KONO-001"].pk), "title": "x",
                                                     "service_date": "2026-11-29", "items": [item]}, format="json")
     assert r.status_code == 400 and message in str(r.data["items"])
+
+
+def test_video_camera_and_notes_items(api, units, media_user):
+    items = [
+        {"kind": "video", "video": "v_k3j9x2", "name": "Sermon clip.mp4", "loop": 1, "notes": "  Play before the sermon "},
+        {"kind": "camera", "label": "Pulpit camera", "notes": "Preacher on screen"},
+        {"kind": "blank", "notes": "   "},
+    ]
+    theme = {"preset": "night", "background_video": "v_bg01", "background_video_name": "Water loop.mp4"}
+    r = api(media_user).post("/api/media/plans/", {"org_unit": str(units["BR-KONO-001"].pk), "title": "x",
+                                                    "service_date": "2026-11-29", "items": items, "theme": theme},
+                             format="json")
+    assert r.status_code == 201, r.data
+    video, camera, blank = r.data["items"]
+    assert video == {"kind": "video", "key": "1", "video": "v_k3j9x2", "name": "Sermon clip.mp4", "loop": True,
+                     "notes": "Play before the sermon"}
+    assert camera == {"kind": "camera", "key": "2", "label": "Pulpit camera", "notes": "Preacher on screen"}
+    assert "notes" not in blank
+    assert r.data["theme"]["background_video"] == "v_bg01"
+    bad = api(media_user).post("/api/media/plans/", {"org_unit": str(units["BR-KONO-001"].pk), "title": "x",
+                                                      "service_date": "2026-11-29",
+                                                      "theme": {"background_video": "https://x.example/v.mp4"}},
+                               format="json")
+    assert bad.status_code == 400 and "background video" in str(bad.data["theme"])
 
 
 def test_unknown_theme_keys_refused(api, units, media_user):

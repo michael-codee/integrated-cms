@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { cameraBlockedByPolicy } from '@/lib/featurePolicy';
 import clsx from 'clsx';
 import { UpdateBanner } from '../offline/UpdateBanner';
 import { CloudOff, KeyRound, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Sun, UserRound, Wifi, X } from 'lucide-react';
@@ -71,6 +72,7 @@ function Sidebar({ onNavigate, collapsed = false, onToggle }: { onNavigate?: () 
                       <NavLink
                         to={item.to}
                         end={item.to === '/'}
+                        reloadDocument={item.reload && cameraBlockedByPolicy()}
                         onClick={onNavigate}
                         onMouseEnter={collapsed ? (e) => showTip(e.currentTarget, item.label) : undefined}
                         onFocus={collapsed ? (e) => showTip(e.currentTarget, item.label) : undefined}

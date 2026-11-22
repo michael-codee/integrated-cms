@@ -51,6 +51,17 @@ export interface SlideContext {
   images: Record<string, MediaImage | undefined>;
 }
 
+/** The slide after the given one: later in the same item, or the first slide of the next item that has one. */
+export function nextSlide(items: PlanItem[], planIndex: number | null, current: Slide[], slide: number, slidesOf: (i: PlanItem) => ItemSlides) {
+  if (slide + 1 < current.length) return { slide: current[slide + 1], item: null as PlanItem | null };
+  if (planIndex === null) return null;
+  for (let i = planIndex + 1; i < items.length; i++) {
+    const s = slidesOf(items[i]).slides;
+    if (s.length) return { slide: s[0], item: items[i] };
+  }
+  return null;
+}
+
 export interface ItemSlides {
   slides: Slide[];
   error?: string;
@@ -64,6 +75,8 @@ export function itemTitle(item: PlanItem, ctx: SlideContext): string {
     case 'scripture': return item.ref;
     case 'text': return item.title || item.body.split('\n')[0] || 'Text';
     case 'image': return ctx.images[item.image]?.title || 'Picture';
+    case 'video': return item.name.replace(/\.[a-z0-9]{2,4}$/i, '') || 'Video';
+    case 'camera': return 'Live camera';
     case 'blank': return 'Blank screen';
   }
 }
@@ -86,6 +99,10 @@ export function slidesFor(item: PlanItem, ctx: SlideContext): ItemSlides {
       return { slides: textSlides(item.title, item.body) };
     case 'image':
       return { slides: [{ kind: 'image', image: item.image, lines: [], label: ctx.images[item.image]?.title }] };
+    case 'video':
+      return { slides: [{ kind: 'video', video: item.video, loop: !!item.loop, lines: [], label: itemTitle(item, ctx) }] };
+    case 'camera':
+      return { slides: [{ kind: 'camera', lines: [], label: item.label || 'Live camera' }] };
     case 'blank':
       return { slides: [{ kind: 'blank', lines: [] }] };
   }

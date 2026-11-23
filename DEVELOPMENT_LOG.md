@@ -341,3 +341,17 @@ known limitations, phase by phase.
 
 **Tests:** 1 new backend test (two phones on one link: offers, labels, replacement, answers readable by both, invalid ids). Browser run with a fake camera, two emulated phones and the projector window: three tiles, fade (both pictures during, one after), dip to black to the computer's camera, Enter to transition, capture and a 2-second recording downloaded, no viewer controls on the projector.
 
+
+## More camera transitions  ✅
+
+- 31 effects in five groups (`frontend/src/modules/presentation/transitions.ts`, one table plus CSS keyframes):
+  - **Basic:** Cut, Fade, Dip to black, Dip to white, Blur dissolve, Flash.
+  - **Wipe:** right, left, down, up, Diagonal, Clock wipe, Blinds, Venetian blinds.
+  - **Slide:** Push left/right/up/down, Cover from right, Cover from below, Uncover.
+  - **Shape:** Circle open, Circle close, Diamond, Doors open, Split from middle, Doors close.
+  - **Motion:** Zoom in, Zoom out, Flip, Spin.
+- The switcher keeps quick buttons for Cut, Fade, Dip to black, Wipe and Push, and adds an **Effect** list with all of them. Lengths are now 0.3, 0.5, 1, 1.5, 2 and 3 s.
+- Effects can animate the new picture, the old one, draw the old one on top (Uncover, Circle close, Zoom out), or add a white flash layer. The ids `wipe` and `slide` are kept, so saved choices still work.
+- Clock wipe and the blinds use `@property` (Chrome, Edge, Safari 16.4+, Firefox 128+). An older browser shows a cut for those two.
+
+**Tests:** new `transitions.test.ts` checks every effect has its keyframes and that cut, unknown effects and zero length switch at once. Every effect was rendered at its midpoint in Chromium and checked by eye.

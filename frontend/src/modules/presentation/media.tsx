@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import { isPhoneSource, phoneStreamFor, usePhoneSources } from './phoneCamera';
+import { TRANSITION_CSS, transitionAnimations } from './transitions';
 import { expectedPosition, type CameraSettings, type Countdown, type LowerThird, type VideoProgress, type VideoTransport } from './channel';
 
 // ---------------------------------------------------------------- time
@@ -180,7 +181,7 @@ type FeedProps = { settings: CameraSettings; muted: boolean; hidden?: boolean; o
 
 /**
  * The camera on screen. When the switcher changes camera, the old picture stays underneath while
- * the new one comes in with the chosen transition (cut, fade, dip to black, wipe or slide).
+ * the new one comes in with the chosen transition (see transitions.ts).
  */
 export function CameraFeed({ settings, muted, hidden, onError }: FeedProps) {
   const id = settings.deviceId || '';
@@ -194,40 +195,33 @@ export function CameraFeed({ settings, muted, hidden, onError }: FeedProps) {
     }
     const t = settings.transition;
     const n = ++counter.current;
-    if (!t || t.kind === 'cut' || !t.ms) { setLayers([{ id, settings, n }]); return; }
+    if (!t || !transitionAnimations(t.kind, t.ms)) { setLayers([{ id, settings, n }]); return; }
     setLayers((ls) => [ls[ls.length - 1], { id, settings, n }]);
     // Not cleared when the settings object changes: the old picture must always go in the end.
     window.setTimeout(() => setLayers((ls) => (ls.some((l) => l.n === n) ? ls.filter((l) => l.n >= n) : ls)), t.ms + 80);
   }, [id, settings]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const t = settings.transition;
-  const ms = t?.ms || 0;
+  const anims = layers.length > 1 ? transitionAnimations(t?.kind, t?.ms || 0) : null;
   return (
     <div className="absolute inset-0 overflow-hidden bg-black" style={hidden ? { visibility: 'hidden' } : undefined}>
       <style>{TRANSITION_CSS}</style>
       {layers.map((l, i) => {
-        const incoming = layers.length > 1 && i === layers.length - 1;
-        const outgoing = layers.length > 1 && i < layers.length - 1;
-        const anim = incoming ? `cam-${t?.kind}-in ${ms}ms ease-in-out both` : outgoing && (t?.kind === 'slide' || t?.kind === 'dip') ? `cam-${t.kind}-out ${ms}ms ease-in-out both` : undefined;
+        const newest = i === layers.length - 1;
+        const animation = anims ? (newest ? anims.incoming : anims.outgoing) : undefined;
+        // Most effects bring the new picture in on top; some take the old one away over it.
+        const zIndex = anims?.outTop && !newest ? 2 : 1;
         return (
-          <div key={l.n} className="absolute inset-0" style={{ animation: anim }}>
+          <div key={l.n} className="absolute inset-0" style={{ animation, zIndex }}>
             {/* Only the newest picture plays sound. */}
-            <SourceFeed settings={l.settings} muted={muted || i < layers.length - 1} onError={i === layers.length - 1 ? onError : undefined} />
+            <SourceFeed settings={l.settings} muted={muted || !newest} onError={newest ? onError : undefined} />
           </div>
         );
       })}
+      {anims?.overlay && <div key={`o${layers[layers.length - 1].n}`} className="pointer-events-none absolute inset-0" style={{ zIndex: 3, background: anims.overlayColor || '#000', animation: anims.overlay }} />}
     </div>
   );
 }
-
-const TRANSITION_CSS = `
-@keyframes cam-fade-in { from { opacity: 0 } to { opacity: 1 } }
-@keyframes cam-dip-in { 0%, 50% { opacity: 0 } 100% { opacity: 1 } }
-@keyframes cam-dip-out { 0% { opacity: 1 } 50%, 100% { opacity: 0 } }
-@keyframes cam-wipe-in { from { clip-path: inset(0 100% 0 0) } to { clip-path: inset(0 0 0 0) } }
-@keyframes cam-slide-in { from { transform: translateX(100%) } to { transform: translateX(0) } }
-@keyframes cam-slide-out { from { transform: translateX(0) } to { transform: translateX(-100%) } }
-`;
 
 function SourceFeed(props: FeedProps) {
   return isPhoneSource(props.settings.deviceId) ? <PhoneCameraFeed {...props} /> : <DeviceCameraFeed {...props} />;

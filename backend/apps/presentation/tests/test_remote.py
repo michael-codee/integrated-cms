@@ -131,6 +131,33 @@ def test_phone_camera_setup_messages(api, media_user):
     assert not RemoteSignal.objects.filter(session_id=sid).exists()
 
 
+def test_several_phone_cameras_on_one_link(api, media_user):
+    desk = api(media_user)
+    r = desk.post("/api/media/remote/")
+    sid, token = r.data["id"], r.data["token"]
+    a, b = phone(api, token), phone(api, token)
+    assert a.post("/api/media/remote/phone/signal/", {"kind": "offer", "payload": {**OFFER, "cid": "pulpit1", "label": " Pulpit "}},
+                  format="json").status_code == 202
+    assert b.post("/api/media/remote/phone/signal/", {"kind": "offer", "payload": {**OFFER, "cid": "choir22"}},
+                  format="json").status_code == 202
+    # a second offer from the same phone replaces only its own
+    a.post("/api/media/remote/phone/signal/", {"kind": "offer", "payload": {**OFFER, "cid": "pulpit1", "label": "Pulpit"}}, format="json")
+    assert a.post("/api/media/remote/phone/signal/", {"kind": "offer", "payload": {**OFFER, "cid": "BAD ID"}},
+                  format="json").status_code == 400
+    r = desk.post(f"/api/media/remote/{sid}/sync/", {"signals_after": 0}, format="json")
+    offers = {s["payload"]["cid"]: s["payload"].get("label") for s in r.data["signals"]}
+    assert offers == {"pulpit1": "Pulpit", "choir22": None}
+    last = r.data["signals"][-1]["id"]
+    desk.post(f"/api/media/remote/{sid}/sync/", {"signals_after": last, "send_signals": [
+        {"kind": "answer", "payload": {**ANSWER, "cid": "pulpit1"}},
+        {"kind": "answer", "payload": {**ANSWER, "cid": "choir22"}}]}, format="json")
+    # every phone sees the answers (and picks its own); reading does not remove them for the others
+    first = a.get("/api/media/remote/phone/", {"signals_after": 0}).data["signals"]
+    second = b.get("/api/media/remote/phone/", {"signals_after": 0}).data["signals"]
+    assert [s["payload"]["cid"] for s in first] == [s["payload"]["cid"] for s in second] == ["pulpit1", "choir22"]
+    assert a.post("/api/media/remote/phone/signal/", {"kind": "bye", "payload": {"cid": "choir22"}}, format="json").status_code == 202
+
+
 def test_media_officer_role(seeded, api, units):
     import importlib
 

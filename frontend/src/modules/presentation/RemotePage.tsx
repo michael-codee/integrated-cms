@@ -214,7 +214,7 @@ function ModeButton({ on, onClick, icon, children }: { on: boolean; onClick: () 
 const CAMERA_STATUS = {
   idle: '',
   connecting: 'Connecting to the control desk…',
-  live: 'Sending. On the desk, choose Phone camera under Live camera and press Show.',
+  live: 'Sending. On the desk, open Cameras, click this camera and press Transition.',
   failed: 'The camera could not reach the media computer. Join the church Wi-Fi (the same network as the media computer) and try again.',
 };
 
@@ -223,6 +223,15 @@ function CameraTab({ sender, onRefresh }: { sender: PhoneCameraSender; onRefresh
   const preview = useRef<HTMLVideoElement>(null);
   const [facing, setFacing] = useState<Facing>('environment');
   const [sound, setSound] = useState(false);
+  const [name, setName] = useState(() => { try { return localStorage.getItem('rlwm-phone-camera-name') || ''; } catch { return ''; } });
+  const [portrait, setPortrait] = useState(() => window.matchMedia?.('(orientation: portrait)').matches ?? false);
+  useEffect(() => {
+    const mq = window.matchMedia?.('(orientation: portrait)');
+    if (!mq) return;
+    const on = () => setPortrait(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const on = sender.status !== 'idle';
@@ -233,7 +242,8 @@ function CameraTab({ sender, onRefresh }: { sender: PhoneCameraSender; onRefresh
   const start = async () => {
     setBusy(true);
     setError('');
-    try { await sender.start(facing, sound); onRefresh(); } catch (e) { sender.stop(false); setError(phoneCameraError(e)); } finally { setBusy(false); }
+    try { localStorage.setItem('rlwm-phone-camera-name', name.trim()); } catch { /* ignore */ }
+    try { await sender.start(facing, sound, name || 'Phone camera'); onRefresh(); } catch (e) { sender.stop(false); setError(phoneCameraError(e)); } finally { setBusy(false); }
   };
   const flip = async () => {
     const next: Facing = facing === 'environment' ? 'user' : 'environment';
@@ -249,6 +259,11 @@ function CameraTab({ sender, onRefresh }: { sender: PhoneCameraSender; onRefresh
       </div>
       {!on ? (
         <>
+          <label className="block text-sm text-slate-300">
+            Camera name on the desk
+            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} placeholder="e.g. Pulpit, Choir, Balcony"
+              className="mt-1 block w-full rounded-lg bg-slate-900 px-3 py-2 text-white ring-1 ring-slate-700 placeholder:text-slate-500 focus:outline-none focus:ring-royal-500" />
+          </label>
           <label className="flex items-center gap-2 text-sm text-slate-300">
             <input type="checkbox" checked={sound} onChange={(e) => setSound(e.target.checked)} />
             Also send the phone&apos;s microphone
@@ -263,6 +278,7 @@ function CameraTab({ sender, onRefresh }: { sender: PhoneCameraSender; onRefresh
           <button type="button" onClick={() => sender.stop()} className="flex items-center justify-center gap-2 rounded-xl bg-red-600 py-3 font-semibold active:bg-red-700"><Square className="h-4 w-4" />Stop camera</button>
         </div>
       )}
+      {portrait && <p className="rounded-lg bg-gold-400/15 px-3 py-2 text-sm text-gold-300">Turn the phone sideways for a landscape picture that fills the screen.</p>}
       {CAMERA_STATUS[sender.status] && <p className={clsx('text-sm', sender.status === 'failed' ? 'text-red-300' : 'text-slate-400')}>{CAMERA_STATUS[sender.status]}</p>}
       {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-300">{error}</p>}
       <p className="text-xs text-slate-500">Keep this page open and the phone plugged in. The picture goes straight to the media computer over the Wi-Fi; on mobile data it may not connect.</p>

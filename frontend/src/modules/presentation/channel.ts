@@ -23,12 +23,20 @@ export interface VideoTransport {
   volume: number;
 }
 
+export type TransitionKind = 'cut' | 'fade' | 'dip' | 'wipe' | 'slide';
+
+/** How the screen changes from one camera to the next (set by the camera switcher on the desk). */
+export interface CameraTransition { kind: TransitionKind; ms: number }
+
 export interface CameraSettings {
+  /** The camera on screen: a device id on this computer, or "phone:<id>" for a phone (see phoneCamera.ts). */
   deviceId: string | null;
   /** The device's name: device ids can differ between windows, so the projector also looks it up by name. */
   label?: string;
   /** Play the capture device's own sound through the projector computer. */
   audio: boolean;
+  /** How to change to this camera from the one before. */
+  transition?: CameraTransition;
 }
 
 export interface LowerThird {

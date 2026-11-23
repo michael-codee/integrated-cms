@@ -7,6 +7,7 @@ collects the presses waiting for it, then applies them itself.
 """
 import hashlib
 import json
+import re
 import secrets
 from datetime import timedelta
 
@@ -32,7 +33,10 @@ TOKEN_HEADER = "HTTP_X_REMOTE_TOKEN"
 SEEN_WITHIN = timedelta(seconds=8)
 SIGNAL_KINDS = {"offer", "answer", "bye"}
 MAX_SIGNAL_BYTES = 40_000
-MAX_SIGNALS = 10
+MAX_SIGNALS = 20
+# Several phones can send their cameras through one remote link: each names itself with a short id.
+CAMERA_ID_RE = re.compile(r"^[a-z0-9]{4,16}$")
+DESK_SIGNAL_KEEP = timedelta(minutes=5)
 
 
 def _after(data, key):
@@ -49,19 +53,29 @@ def _clean_signal(item):
     payload = item.get("payload") or {}
     if not isinstance(payload, dict) or len(json.dumps(payload)) > MAX_SIGNAL_BYTES:
         return None
+    cid = payload.get("cid")
+    if cid is not None and not (isinstance(cid, str) and CAMERA_ID_RE.match(cid)):
+        return None
     if item["kind"] in ("offer", "answer"):
         sdp = payload.get("sdp")
         if payload.get("type") != item["kind"] or not isinstance(sdp, str) or not sdp.startswith("v="):
             return None
-        payload = {"type": item["kind"], "sdp": sdp}
+        clean = {"type": item["kind"], "sdp": sdp}
     else:
-        payload = {}
-    return item["kind"], payload
+        clean = {}
+    if cid:
+        clean["cid"] = cid
+    label = payload.get("label")
+    if item["kind"] == "offer" and isinstance(label, str) and label.strip():
+        clean["label"] = label.strip()[:40]
+    return item["kind"], clean
 
 
-def _take_signals(session, sender, after):
-    """Signals from ``sender`` newer than ``after``; the ones up to ``after`` have been read."""
-    if after:
+def _take_signals(session, sender, after, *, delete_read=True):
+    """Signals from ``sender`` newer than ``after``. The desk is the only reader of the phones'
+    messages, so those up to ``after`` are deleted; the desk's answers are read by every phone on
+    the link (each picks its own by camera id), so they are kept a few minutes instead."""
+    if after and delete_read:
         session.signals.filter(sender=sender, id__lte=after).delete()
     return list(session.signals.filter(sender=sender, id__gt=after).values("id", "kind", "payload")[:MAX_SIGNALS])
 
@@ -134,10 +148,13 @@ class RemoteSyncView(APIView):
         send = request.data.get("send_signals") or []
         if not isinstance(send, list) or len(send) > MAX_SIGNALS:
             return Response({"send_signals": "Too many messages."}, status=status.HTTP_400_BAD_REQUEST)
-        for item in send:
-            clean = _clean_signal(item)
-            if clean is None:
-                return Response({"send_signals": "Not a camera set-up message."}, status=status.HTTP_400_BAD_REQUEST)
+        cleaned = [_clean_signal(item) for item in send]
+        if any(c is None for c in cleaned):
+            return Response({"send_signals": "Not a camera set-up message."}, status=status.HTTP_400_BAD_REQUEST)
+        if cleaned:
+            session.signals.filter(sender=RemoteSignal.Sender.DESK,
+                                   created_at__lt=timezone.now() - DESK_SIGNAL_KEEP).delete()
+        for clean in cleaned:
             RemoteSignal.objects.create(session=session, sender=RemoteSignal.Sender.DESK, kind=clean[0], payload=clean[1])
         signals = _take_signals(session, RemoteSignal.Sender.PHONE, _after(request.data, "signals_after"))
         return Response({"active": True, "commands": commands, "signals": signals,
@@ -180,7 +197,8 @@ class PhoneView(APIView):
         if session is None or not session.is_active:
             return self._gone()
         RemoteSession.objects.filter(pk=session.pk).update(phone_seen_at=timezone.now())
-        signals = _take_signals(session, RemoteSignal.Sender.DESK, _after(request.query_params, "signals_after"))
+        signals = _take_signals(session, RemoteSignal.Sender.DESK, _after(request.query_params, "signals_after"),
+                                delete_read=False)
         return Response({"state": session.state, "desk_connected": _recent(session.desk_seen_at),
                          "expires_at": session.expires_at, "signals": signals})
 
@@ -222,8 +240,10 @@ class PhoneSignalView(PhoneView):
             return Response({"detail": "The control desk is not answering. Check that it is open."},
                             status=status.HTTP_429_TOO_MANY_REQUESTS)
         if clean[0] == "offer":
-            # A new offer replaces any the desk has not read yet.
-            session.signals.filter(sender=RemoteSignal.Sender.PHONE).delete()
+            # A new offer from the same phone camera replaces one the desk has not read yet.
+            unread = session.signals.filter(sender=RemoteSignal.Sender.PHONE)
+            cid = clean[1].get("cid")
+            (unread.filter(payload__cid=cid) if cid else unread.exclude(payload__has_key="cid")).delete()
         sig = RemoteSignal.objects.create(session=session, sender=RemoteSignal.Sender.PHONE, kind=clean[0],
                                           payload=clean[1])
         return Response({"id": sig.id, "desk_connected": _recent(session.desk_seen_at)}, status=status.HTTP_202_ACCEPTED)

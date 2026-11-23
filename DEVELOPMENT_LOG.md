@@ -327,3 +327,17 @@ known limitations, phase by phase.
 
 **Tests:** 2 new backend tests (camera set-up messages: who may send what, replacement, clean-up; Media Officer permissions and migration). Browser run with a fake camera: phone sends camera, desk shows *Phone camera connected* in about 2 s, picture on the desk preview and the projector window, projector reload, lens switch, stop.
 
+---
+
+## Camera switcher with transitions; several phone cameras; capture and record  ✅
+
+**Completed**
+
+- **Several phones at once** on one remote link: each phone names its camera with a random id (`cid`, kept for the page's life) and a label typed on the phone. The server keeps `cid`/`label` in offers, replaces only the same phone's unread offer, and keeps the desk's answers for 5 minutes for every phone to read (each takes its own) instead of deleting them on first read. The desk holds one WebRTC link per phone; the projector relay carries one local link per phone and only re-links phones whose picture changed, so a phone joining does not interrupt the one on screen.
+- **Camera switcher** (*Cameras* on the desk): every camera on the computer and every phone as live tiles; click = next (green), **Transition** / Enter = on screen (red) with the chosen effect and length (0.5–2 s, remembered on the computer), **Cut now** / double-click = at once; the previous camera becomes the next one. Transition from slides puts the camera on screen with a cut.
+- **Transitions on the projector and the desk preview**: `CameraSettings.transition` (`cut`, `fade`, `dip`, `wipe`, `slide` + ms) travels with the live state; the camera view keeps the outgoing picture underneath while the new one animates in (CSS keyframes), then drops it. Only the newest picture plays sound.
+- **Full-screen view on the desk** for any camera: landscape, Rotate (portrait phones), Fill/Fit, **Capture** (PNG of the current frame, rotation applied) and **Record** (MediaRecorder WebM ~6 Mbit/s, saved to Downloads and added to the computer's Videos). Nothing of it is sent to the projector. Phones now ask for 16:9 at up to 1080p and 4 Mbit/s and tell the user to turn the phone sideways.
+- Camera source ids: a device id, or `phone:<cid>` (plain `phone` = the first phone, for settings saved before). A phone is not restored as the camera when the desk reloads.
+
+**Tests:** 1 new backend test (two phones on one link: offers, labels, replacement, answers readable by both, invalid ids). Browser run with a fake camera, two emulated phones and the projector window: three tiles, fade (both pictures during, one after), dip to black to the computer's camera, Enter to transition, capture and a 2-second recording downloaded, no viewer controls on the projector.
+

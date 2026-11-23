@@ -4,6 +4,7 @@
  * Pictures travel as Blobs (no expiring links on the projector side).
  */
 import type { Slide, Theme } from './types';
+import type { TransitionKind } from './transitions';
 
 export type ScreenMode = 'show' | 'black' | 'clear' | 'logo';
 
@@ -23,7 +24,7 @@ export interface VideoTransport {
   volume: number;
 }
 
-export type TransitionKind = 'cut' | 'fade' | 'dip' | 'wipe' | 'slide';
+export type { TransitionKind };
 
 /** How the screen changes from one camera to the next (set by the camera switcher on the desk). */
 export interface CameraTransition { kind: TransitionKind; ms: number }

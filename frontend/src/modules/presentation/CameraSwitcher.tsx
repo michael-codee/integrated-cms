@@ -12,16 +12,10 @@ import { Button, Select, useToast } from '@/components/ui';
 import type { CameraSettings, CameraTransition, TransitionKind } from './channel';
 import { addVideoFiles, formatTime } from './localVideos';
 import { cameraBlockedByPolicy, cameraErrorMessage, findCameras, openCamera, StreamVideo, type CameraDevice } from './media';
+import { effectFor, isTransitionKind, QUICK_TRANSITIONS, TRANSITION_GROUPS, TRANSITIONS } from './transitions';
 import { isPhoneSource, phoneSourceId, phoneStreamFor, usePhoneSources, type PhoneSource } from './phoneCamera';
 
-export const TRANSITIONS: { kind: TransitionKind; label: string }[] = [
-  { kind: 'cut', label: 'Cut' },
-  { kind: 'fade', label: 'Fade' },
-  { kind: 'dip', label: 'Dip to black' },
-  { kind: 'wipe', label: 'Wipe' },
-  { kind: 'slide', label: 'Slide' },
-];
-const DURATIONS = [500, 1000, 1500, 2000];
+const DURATIONS = [300, 500, 1000, 1500, 2000, 3000];
 const PREFS = 'rlwm-camera-switcher';
 
 interface Source { id: string; label: string; phone?: PhoneSource }
@@ -29,7 +23,7 @@ interface Source { id: string; label: string; phone?: PhoneSource }
 function readPrefs(): CameraTransition {
   try {
     const p = JSON.parse(localStorage.getItem(PREFS) || 'null');
-    if (p && TRANSITIONS.some((t) => t.kind === p.kind) && DURATIONS.includes(p.ms)) return p;
+    if (p && isTransitionKind(p.kind) && DURATIONS.includes(p.ms)) return p;
   } catch { /* ignore */ }
   return { kind: 'fade', ms: 1000 };
 }
@@ -129,13 +123,22 @@ export function CameraSwitcher({ program, onScreen, onTake, audio }: {
     <section className="mb-4 rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800" aria-label="Camera switcher">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <p className="mr-auto flex items-center gap-1.5 text-sm font-semibold"><Camera className="h-4 w-4 text-royal-600" />Camera switcher</p>
-        <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Transition">
-          {TRANSITIONS.map((t) => (
-            <button key={t.kind} type="button" role="radio" aria-checked={transition.kind === t.kind} onClick={() => setTransition({ ...transition, kind: t.kind })}
-              className={clsx('rounded-md px-2.5 py-1.5 text-xs font-semibold ring-1', transition.kind === t.kind ? 'bg-royal-600 text-white ring-royal-600' : 'text-slate-600 ring-slate-300 hover:bg-slate-50 dark:text-slate-300 dark:ring-slate-600 dark:hover:bg-slate-800')}>
-              {t.label}
+        <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Quick transition">
+          {QUICK_TRANSITIONS.map((kind) => (
+            <button key={kind} type="button" role="radio" aria-checked={transition.kind === kind} onClick={() => setTransition({ ...transition, kind })}
+              className={clsx('rounded-md px-2.5 py-1.5 text-xs font-semibold ring-1', transition.kind === kind ? 'bg-royal-600 text-white ring-royal-600' : 'text-slate-600 ring-slate-300 hover:bg-slate-50 dark:text-slate-300 dark:ring-slate-600 dark:hover:bg-slate-800')}>
+              {effectFor(kind)?.label}
             </button>
           ))}
+        </div>
+        <div className="w-44 shrink-0">
+          <Select value={transition.kind} onChange={(e) => { if (isTransitionKind(e.target.value)) setTransition({ ...transition, kind: e.target.value }); }} aria-label="Transition effect">
+            {TRANSITION_GROUPS.map((g) => (
+              <optgroup key={g} label={g}>
+                {TRANSITIONS.filter((t) => t.group === g).map((t) => <option key={t.kind} value={t.kind}>{t.label}</option>)}
+              </optgroup>
+            ))}
+          </Select>
         </div>
         <div className="w-24 shrink-0">
           <Select value={transition.ms} onChange={(e) => setTransition({ ...transition, ms: Number(e.target.value) })} aria-label="Transition length" disabled={transition.kind === 'cut'}>

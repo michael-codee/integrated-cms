@@ -14,12 +14,13 @@ import { DEFAULT_VERSION, loadBible, lookup, shortName, type Bible, type Transla
 import { useTranslations } from './bibleImport';
 import { TranslationsDialog } from './Translations';
 import { RemotePanel, useRemote, type RemoteCommand, type RemoteState } from './remote';
-import { DeskPhoneCamera, startDeskRelay, type CameraLinkStatus } from './phoneCamera';
+import { DeskPhoneCameras, startDeskRelay } from './phoneCamera';
+import { CameraSwitcher } from './CameraSwitcher';
 import { withLocalCopy } from './cache';
 import {
   expectedPosition, openChannel, openOutputWindow, openStageWindow, type CameraSettings, type Countdown, type LiveState, type LowerThird, type ScreenMode, type VideoProgress, type VideoTransport,
 } from './channel';
-import { CameraPanel, CountdownPanel, LowerThirdPanel, StageMessagePanel, VideoControls, VideoLibrary, readCameraSettings } from './LivePanels';
+import { CameraPanel, CountdownPanel, LowerThirdPanel, StageMessagePanel, VideoControls, VideoLibrary, readCameraSettings, saveCameraSettings } from './LivePanels';
 import { resolveVideo, useLocalVideos, useLocalVideoUrl } from './localVideos';
 import { nextSlide, slidesFor, itemTitle, type SlideContext } from './slides';
 import { SlideView } from './SlideView';
@@ -30,6 +31,7 @@ import type { MediaImage, PlanItem, ServicePlan, Slide, Song, SongSummary, Theme
 const SERVICE_TITLES = ['Sunday Divine Service', 'Tuesday Bible Studies', 'Friday Prayer and Deliverance Service'];
 const DEFAULT_THEME: Theme = { preset: 'royal', font_scale: 1, align: 'center', show_reference: true, uppercase: false };
 const LAST_PLAN = 'rlwm-presentation-last-plan';
+const SWITCHER_OPEN = 'rlwm-presentation-switcher-open';
 
 type Selection = { source: 'plan'; index: number } | { source: 'quick'; item: PlanItem };
 interface Live { item: PlanItem; planIndex: number | null; slide: number }
@@ -327,13 +329,12 @@ export default function PresenterPage() {
       }
     }
   };
-  // The phone's camera: set up through the remote's sync, passed on to the projector window locally.
-  const [phoneStatus, setPhoneStatus] = useState<CameraLinkStatus>('idle');
-  const phoneCam = useRef<DeskPhoneCamera | null>(null);
+  // Phone cameras: set up through the remote's sync, passed on to the projector window locally.
+  const phoneCam = useRef<DeskPhoneCameras | null>(null);
   const remote = useRemote(remoteState, onRemote, (sig) => { phoneCam.current?.handle(sig); });
   const { sendSignal } = remote;
   useEffect(() => {
-    const cam = new DeskPhoneCamera(sendSignal, setPhoneStatus);
+    const cam = new DeskPhoneCameras(sendSignal);
     phoneCam.current = cam;
     const stopRelay = startDeskRelay();
     return () => { cam.close(); phoneCam.current = null; stopRelay(); };
@@ -409,6 +410,16 @@ export default function PresenterPage() {
     setSelection({ source: 'quick', item });
     goLive(item, null, 0);
   };
+  // Camera switcher: put the chosen camera on screen with its transition.
+  const [switcherOpen, setSwitcherOpen] = useState(() => { try { return localStorage.getItem(SWITCHER_OPEN) === '1'; } catch { return false; } });
+  const toggleSwitcher = () => setSwitcherOpen((o) => { try { localStorage.setItem(SWITCHER_OPEN, o ? '0' : '1'); } catch { /* ignore */ } return !o; });
+  const takeCamera = ({ deviceId, label, transition }: { deviceId: string; label: string; transition: CameraSettings['transition'] }) => {
+    const onScreen = liveSlide?.kind === 'camera';
+    const next: CameraSettings = { ...camera, deviceId, label, transition: onScreen ? transition : { kind: 'cut', ms: 0 } };
+    saveCameraSettings(next);
+    setCamera(next);
+    if (!onScreen) showCamera();
+  };
   const selectedVideoMissing = selectedItem?.kind === 'video' && local.loaded && !localVideoOf(selectedItem);
 
   return (
@@ -418,6 +429,7 @@ export default function PresenterPage() {
         actions={<>
           <Link to="/presentation/library"><Button variant="secondary" icon={<Library className="h-4 w-4" />}>Library</Button></Link>
           <Button variant="secondary" icon={<Film className="h-4 w-4" />} onClick={() => setDialog('videos')}>Videos</Button>
+          <Button variant="secondary" icon={<Webcam className="h-4 w-4" />} aria-pressed={switcherOpen} onClick={toggleSwitcher}>Cameras</Button>
           <Button variant="secondary" icon={<Presentation className="h-4 w-4" />} onClick={() => openStageWindow()}>
             {stageConnected ? 'Stage display open' : 'Stage display'}
           </Button>
@@ -425,6 +437,8 @@ export default function PresenterPage() {
             {outputConnected ? 'Projector open' : 'Open projector window'}
           </Button>
         </>} />
+
+      {switcherOpen && <CameraSwitcher program={camera} onScreen={liveSlide?.kind === 'camera'} onTake={takeCamera} audio={camera.audio} />}
 
       <div className="grid gap-4 xl:grid-cols-[17rem_minmax(0,1fr)_22rem] lg:grid-cols-[16rem_minmax(0,1fr)]">
         {/* ---------------------------------------------------- order of service */}
@@ -566,7 +580,7 @@ export default function PresenterPage() {
           </div>
 
           <RemotePanel remote={remote} />
-          <CameraPanel settings={camera} onChange={setCamera} onShow={showCamera} live={liveSlide?.kind === 'camera'} phoneStatus={phoneStatus} />
+          <CameraPanel settings={camera} onChange={setCamera} onShow={showCamera} live={liveSlide?.kind === 'camera'} />
           <LowerThirdPanel value={lowerThird} onShow={setLowerThird} onHide={() => setLowerThird(null)} />
           <CountdownPanel value={countdown} onStart={setCountdown} onStop={() => setCountdown(null)} />
           <StageMessagePanel value={stageMessage} onSend={setStageMessage} connected={stageConnected} />

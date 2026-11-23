@@ -4,7 +4,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
-import { PHONE_CAMERA, usePhoneStream } from './phoneCamera';
+import { isPhoneSource, phoneStreamFor, usePhoneSources } from './phoneCamera';
 import { expectedPosition, type CameraSettings, type Countdown, type LowerThird, type VideoProgress, type VideoTransport } from './channel';
 
 // ---------------------------------------------------------------- time
@@ -151,7 +151,7 @@ async function cameraId(settings: CameraSettings) {
   } catch { return settings.deviceId; }
 }
 
-async function openCamera(saved: CameraSettings, withSound: boolean) {
+export async function openCamera(saved: CameraSettings, withSound: boolean) {
   const settings = { ...saved, deviceId: await cameraId(saved) };
   // Same size request everywhere, so the desk preview and the projector can share the device.
   const video: MediaTrackConstraints = { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } };
@@ -176,30 +176,95 @@ async function openCamera(saved: CameraSettings, withSound: boolean) {
   }
 }
 
-export function CameraFeed(props: { settings: CameraSettings; muted: boolean; hidden?: boolean; onError?: (message: string) => void }) {
-  return props.settings.deviceId === PHONE_CAMERA ? <PhoneCameraFeed {...props} /> : <DeviceCameraFeed {...props} />;
+type FeedProps = { settings: CameraSettings; muted: boolean; hidden?: boolean; onError?: (message: string) => void };
+
+/**
+ * The camera on screen. When the switcher changes camera, the old picture stays underneath while
+ * the new one comes in with the chosen transition (cut, fade, dip to black, wipe or slide).
+ */
+export function CameraFeed({ settings, muted, hidden, onError }: FeedProps) {
+  const id = settings.deviceId || '';
+  const [layers, setLayers] = useState<{ id: string; settings: CameraSettings; n: number }[]>(() => [{ id, settings, n: 0 }]);
+  const counter = useRef(0);
+  const top = layers[layers.length - 1];
+  useEffect(() => {
+    if (top.id === id) {
+      if (top.settings !== settings) setLayers((ls) => ls.map((l, i) => (i === ls.length - 1 ? { ...l, settings } : l)));
+      return;
+    }
+    const t = settings.transition;
+    const n = ++counter.current;
+    if (!t || t.kind === 'cut' || !t.ms) { setLayers([{ id, settings, n }]); return; }
+    setLayers((ls) => [ls[ls.length - 1], { id, settings, n }]);
+    // Not cleared when the settings object changes: the old picture must always go in the end.
+    window.setTimeout(() => setLayers((ls) => (ls.some((l) => l.n === n) ? ls.filter((l) => l.n >= n) : ls)), t.ms + 80);
+  }, [id, settings]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const t = settings.transition;
+  const ms = t?.ms || 0;
+  return (
+    <div className="absolute inset-0 overflow-hidden bg-black" style={hidden ? { visibility: 'hidden' } : undefined}>
+      <style>{TRANSITION_CSS}</style>
+      {layers.map((l, i) => {
+        const incoming = layers.length > 1 && i === layers.length - 1;
+        const outgoing = layers.length > 1 && i < layers.length - 1;
+        const anim = incoming ? `cam-${t?.kind}-in ${ms}ms ease-in-out both` : outgoing && (t?.kind === 'slide' || t?.kind === 'dip') ? `cam-${t.kind}-out ${ms}ms ease-in-out both` : undefined;
+        return (
+          <div key={l.n} className="absolute inset-0" style={{ animation: anim }}>
+            {/* Only the newest picture plays sound. */}
+            <SourceFeed settings={l.settings} muted={muted || i < layers.length - 1} onError={i === layers.length - 1 ? onError : undefined} />
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
-/** The picture a phone sends from the remote page (see phoneCamera.ts). */
-function PhoneCameraFeed({ settings, muted, hidden }: { settings: CameraSettings; muted: boolean; hidden?: boolean }) {
-  const ref = useRef<HTMLVideoElement>(null);
-  const stream = usePhoneStream();
-  const withSound = settings.audio && !muted;
+const TRANSITION_CSS = `
+@keyframes cam-fade-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes cam-dip-in { 0%, 50% { opacity: 0 } 100% { opacity: 1 } }
+@keyframes cam-dip-out { 0% { opacity: 1 } 50%, 100% { opacity: 0 } }
+@keyframes cam-wipe-in { from { clip-path: inset(0 100% 0 0) } to { clip-path: inset(0 0 0 0) } }
+@keyframes cam-slide-in { from { transform: translateX(100%) } to { transform: translateX(0) } }
+@keyframes cam-slide-out { from { transform: translateX(0) } to { transform: translateX(-100%) } }
+`;
+
+function SourceFeed(props: FeedProps) {
+  return isPhoneSource(props.settings.deviceId) ? <PhoneCameraFeed {...props} /> : <DeviceCameraFeed {...props} />;
+}
+
+/** A video element showing a stream (no sound unless asked). */
+export function StreamVideo({ stream, muted = true, className, videoRef }: { stream: MediaStream | null; muted?: boolean; className?: string; videoRef?: React.Ref<HTMLVideoElement> }) {
+  const ref = useRef<HTMLVideoElement | null>(null);
   useEffect(() => {
     const v = ref.current;
     if (!v) return;
-    v.srcObject = stream;
+    if (v.srcObject !== stream) v.srcObject = stream;
     if (stream) v.play().catch(() => { v.muted = true; v.play().catch(() => {}); });
   }, [stream]);
   return (
-    <div className="absolute inset-0 bg-black" style={hidden ? { visibility: 'hidden' } : undefined}>
-      <video ref={ref} playsInline muted={!withSound} className="h-full w-full object-contain" />
+    <video playsInline muted={muted} className={className}
+      ref={(el) => {
+        ref.current = el;
+        if (typeof videoRef === 'function') videoRef(el);
+        else if (videoRef) (videoRef as React.MutableRefObject<HTMLVideoElement | null>).current = el;
+      }} />
+  );
+}
+
+/** The picture a phone sends from the remote page (see phoneCamera.ts). */
+function PhoneCameraFeed({ settings, muted }: FeedProps) {
+  const stream = phoneStreamFor(usePhoneSources(), settings.deviceId);
+  const withSound = settings.audio && !muted;
+  return (
+    <div className="absolute inset-0 bg-black">
+      <StreamVideo stream={stream} muted={!withSound} className="h-full w-full object-contain" />
       {!stream && muted && <p className="absolute inset-x-[6cqw] top-1/2 -translate-y-1/2 text-center text-[3.2cqh] font-medium text-white/80">Waiting for the phone camera. On the phone remote, open Camera and press Send camera.</p>}
     </div>
   );
 }
 
-function DeviceCameraFeed({ settings, muted, hidden, onError }: { settings: CameraSettings; muted: boolean; hidden?: boolean; onError?: (message: string) => void }) {
+function DeviceCameraFeed({ settings, muted, hidden, onError }: FeedProps) {
   const ref = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState('');
   const withSound = settings.audio && !muted;

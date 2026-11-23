@@ -11,7 +11,7 @@ import { Button, Field, Input, Modal, Select, useToast } from '@/components/ui';
 import { expectedPosition, type CameraSettings, type Countdown, type LowerThird, type VideoProgress, type VideoTransport } from './channel';
 import { addVideoFiles, deleteVideo, formatBytes, formatTime, storageEstimate, useLocalVideoUrl, type LocalVideoInfo } from './localVideos';
 import { cameraBlockedByPolicy, cameraErrorMessage, findCameras, formatRemaining, useNow, VideoThumb, type CameraDevice } from './media';
-import { PHONE_CAMERA, type CameraLinkStatus } from './phoneCamera';
+import { isPhoneSource, phoneSourceId, usePhoneSources, type CameraLinkStatus } from './phoneCamera';
 
 export function Panel({ icon, title, children, aside }: { icon: ReactNode; title: string; children: ReactNode; aside?: ReactNode }) {
   return (
@@ -142,7 +142,12 @@ export function VideoControls({ name, transport, progress, onChange }: {
 // ---------------------------------------------------------------- live camera
 
 const CAMERA_KEY = 'rlwm-presentation-camera';
-export const readCameraSettings = (): CameraSettings => readJson(CAMERA_KEY, { deviceId: null, audio: false });
+export const readCameraSettings = (): CameraSettings => {
+  const s = readJson<CameraSettings>(CAMERA_KEY, { deviceId: null, audio: false });
+  // A phone is only there while it sends: start from the computer's own camera.
+  return isPhoneSource(s.deviceId) ? { ...s, deviceId: null, label: undefined, transition: undefined } : { ...s, transition: undefined };
+};
+export const saveCameraSettings = (s: CameraSettings) => writeJson(CAMERA_KEY, { ...s, transition: undefined });
 
 const PHONE_STATUS: Record<CameraLinkStatus, string> = {
   idle: 'No phone is sending its camera. On the phone remote, open Camera and press Send camera.',
@@ -151,7 +156,10 @@ const PHONE_STATUS: Record<CameraLinkStatus, string> = {
   failed: 'The phone camera could not connect. Put the phone on the church Wi-Fi and press Send camera again.',
 };
 
-export function CameraPanel({ settings, onChange, onShow, live, phoneStatus = 'idle' }: { settings: CameraSettings; onChange: (s: CameraSettings) => void; onShow: () => void; live: boolean; phoneStatus?: CameraLinkStatus }) {
+export function CameraPanel({ settings, onChange, onShow, live }: { settings: CameraSettings; onChange: (s: CameraSettings) => void; onShow: () => void; live: boolean }) {
+  const phones = usePhoneSources();
+  const phone = isPhoneSource(settings.deviceId) ? phones.find((p) => phoneSourceId(p.cid) === settings.deviceId) || (settings.deviceId === 'phone' ? phones[0] : undefined) : undefined;
+  const phoneStatus: CameraLinkStatus = phone?.status ?? 'idle';
   const [devices, setDevices] = useState<CameraDevice[]>([]);
   const [error, setError] = useState('');
   const [looking, setLooking] = useState(false);
@@ -162,12 +170,12 @@ export function CameraPanel({ settings, onChange, onShow, live, phoneStatus = 'i
       const list = await findCameras(ask);
       setDevices(list);
       setError(list.length ? '' : 'No camera or capture device is connected.');
-      if (list.length && settings.deviceId !== PHONE_CAMERA && !list.some((d) => d.id === settings.deviceId)) update({ deviceId: list[list.length - 1].id, label: list[list.length - 1].label });
+      if (list.length && !isPhoneSource(settings.deviceId) && !list.some((d) => d.id === settings.deviceId)) update({ deviceId: list[list.length - 1].id, label: list[list.length - 1].label });
     } catch (e) { setError(cameraErrorMessage(e)); }
     finally { setLooking(false); }
   };
   useEffect(() => { if (!blocked) look(false).catch(() => {}); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const update = (patch: Partial<CameraSettings>) => { const next = { ...settings, ...patch }; writeJson(CAMERA_KEY, next); onChange(next); };
+  const update = (patch: Partial<CameraSettings>) => { const next = { ...settings, transition: undefined, ...patch }; saveCameraSettings(next); onChange(next); };
   const named = devices.some((d) => !/^Camera \d+$/.test(d.label));
 
   return (
@@ -182,19 +190,21 @@ export function CameraPanel({ settings, onChange, onShow, live, phoneStatus = 'i
       ) : (
         <>
           <div className="flex gap-2">
-            <Select value={settings.deviceId || ''} onChange={(e) => update({ deviceId: e.target.value || null, label: devices.find((d) => d.id === e.target.value)?.label })} aria-label="Camera or capture device" className="min-w-0 flex-1">
+            <Select value={settings.deviceId || ''} onChange={(e) => update({ deviceId: e.target.value || null, label: devices.find((d) => d.id === e.target.value)?.label ?? phones.find((p) => phoneSourceId(p.cid) === e.target.value)?.label })} aria-label="Camera or capture device" className="min-w-0 flex-1">
               {!devices.length && <option value="">Default camera</option>}
               {devices.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
-              <option value={PHONE_CAMERA}>Phone camera (from the phone remote)</option>
+              {phones.map((p) => <option key={p.cid} value={phoneSourceId(p.cid)}>{p.label} (phone)</option>)}
+              {isPhoneSource(settings.deviceId) && !phone && <option value={settings.deviceId!}>{settings.label || 'Phone camera'} (not connected)</option>}
+              {!phones.length && <option value="phone">Phone camera (from the phone remote)</option>}
             </Select>
             <Button variant="secondary" loading={looking} onClick={() => look(true)}>{named ? 'Refresh' : 'Find cameras'}</Button>
           </div>
-          {settings.deviceId === PHONE_CAMERA && (
+          {isPhoneSource(settings.deviceId) && (
             <p className={clsx('mt-2 text-xs', phoneStatus === 'live' ? 'text-emerald-600' : phoneStatus === 'failed' ? 'text-red-600' : 'text-slate-500')}>{PHONE_STATUS[phoneStatus]}</p>
           )}
           <label className="mt-2 inline-flex items-center gap-1.5 text-sm">
             <input type="checkbox" checked={settings.audio} onChange={(e) => update({ audio: e.target.checked })} />
-            {settings.deviceId === PHONE_CAMERA ? 'Play the phone\'s sound on the projector computer' : <>Play the device&apos;s sound on the projector computer</>}
+            {isPhoneSource(settings.deviceId) ? 'Play the phone\'s sound on the projector computer' : <>Play the device&apos;s sound on the projector computer</>}
           </label>
           <p className="mt-1 text-xs text-slate-500">Leave this off when the sound already goes through the mixer, to avoid an echo.</p>
           {error && <p className="mt-1.5 text-xs text-red-600">{error}</p>}
